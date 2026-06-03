@@ -7,6 +7,7 @@
     <Nullable>enable</Nullable>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <DefaultItemExcludes>$(DefaultItemExcludes);artifacts/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,4 +17,3 @@
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.6" />
   </ItemGroup>
 </Project>
-

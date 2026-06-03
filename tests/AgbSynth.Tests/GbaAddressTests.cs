@@ -23,4 +23,20 @@ public sealed class GbaAddressTests
     {
         Assert.Equal(0x08000100u, GbaAddress.ToPointer(0x100));
     }
+
+    [Fact]
+    public void Parser_AcceptsRomOffset()
+    {
+        Assert.True(GbaAddressParser.TryParseRomAddressOrOffset("0x100", 1024, out int offset, out var error));
+        Assert.Null(error);
+        Assert.Equal(0x100, offset);
+    }
+
+    [Fact]
+    public void Parser_AcceptsGbaPointer()
+    {
+        Assert.True(GbaAddressParser.TryParseRomAddressOrOffset("0x08000100", 1024, out int offset, out var error));
+        Assert.Null(error);
+        Assert.Equal(0x100, offset);
+    }
 }

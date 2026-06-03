@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.IO;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
@@ -35,8 +36,38 @@ public partial class MainWindow : Window
         if (files.Count == 0)
             return;
 
-        await _viewModel.LoadRomAsync(files[0]);
+        if (!await _viewModel.LoadRomAsync(files[0]))
+            return;
+
         Title = $"{files[0].Name} - AgbSynth";
+
+        if (_viewModel.LoadedRom is null)
+            return;
+
+        var addressWindow = new SongTableAddressWindow(_viewModel.LoadedRom.Length);
+        bool accepted = await addressWindow.ShowDialog<bool>(this);
+        if (!accepted || addressWindow.SongTableOffset is not int songTableOffset)
+            return;
+
+        var saveFile = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Save AgbSynth Project",
+            SuggestedFileName = $"{Path.GetFileNameWithoutExtension(files[0].Name)}.agbsynth.json",
+            FileTypeChoices = new List<FilePickerFileType>
+            {
+                new("AgbSynth project (*.agbsynth.json)") { Patterns = new[] { "*.agbsynth.json" } },
+                new("JSON file (*.json)") { Patterns = new[] { "*.json" } },
+                FilePickerFileTypes.All
+            }
+        });
+
+        string? outputPath = saveFile?.Path?.LocalPath;
+        if (string.IsNullOrWhiteSpace(outputPath))
+            return;
+
+        _viewModel.CreateProjectFile(
+            outputPath,
+            songTableOffset,
+            addressWindow.SongTableAddressText ?? songTableOffset.ToString("X"));
     }
 }
-

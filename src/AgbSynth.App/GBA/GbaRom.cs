@@ -26,6 +26,7 @@ public sealed class GbaRom
     public string GameCode { get; }
     public int Length => _bytes.Length;
     public ReadOnlyMemory<byte> Bytes => _bytes;
+    public uint Crc32 => Crc32Calculator.Compute(_bytes);
 
     public static async Task<GbaRom> LoadAsync(Stream stream, string sourcePath, CancellationToken cancellationToken = default)
     {

@@ -209,7 +209,36 @@ AgbSynth can reuse NitroSynth's broad interaction model:
 - master meter and per-channel meters
 - dark/light theme support
 
+UI style should follow NitroSynth unless there is a specific reason to diverge:
+
+- similar font sizes and density
+- similar dark/light color balance
+- similar square-edged controls and compact dropdowns
+- similar tab, mixer, meter, and setting layout behavior
+
 The internal data model should be separate from NitroSynth, because NDS SDAT and GBA MP2K have different archive structures, pointer models, and playback semantics.
+
+## Song Table Discovery Strategy
+
+Initial AgbSynth builds should not use external XML/profile data.
+
+Recommended resolution order:
+
+1. Manual song table address input.
+2. Heuristic scan for likely MP2K song tables.
+3. Optional profile lookup from external metadata later.
+
+The first workflow should be explicit:
+
+1. Open `.gba` ROM.
+2. Prompt for the MP2K song table address.
+3. Prompt for the AgbSynth project save path.
+4. Extract initial song table data.
+5. Write the project file.
+
+Manual input is required because many ROM hacks, prototypes, custom builds, and unsupported commercial ROMs will not be present in any XML database.
+
+Heuristic scanning can help later, but should be treated as assisted detection rather than guaranteed truth. Candidate validation should check whether table entries point to plausible MP2K song headers, and whether those headers contain plausible track counts, track pointers, voicegroup pointers, priority, and reverb values.
 
 ## Suggested Source Layout
 

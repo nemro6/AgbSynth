@@ -4,6 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <DefaultItemExcludes>$(DefaultItemExcludes);artifacts/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,4 +20,3 @@
     <ProjectReference Include="..\..\src\AgbSynth.App\AgbSynth.App.csproj" />
   </ItemGroup>
 </Project>
-
