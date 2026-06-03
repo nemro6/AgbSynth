@@ -1,0 +1,17 @@
+bin/
+obj/
+**/bin/
+**/obj/
+*.user
+*.suo
+*.userprefs
+.vs/
+.idea/
+.vscode/
+.DS_Store
+artifacts/
+.artifacts/
+**/artifacts/
+*.tmp
+*.swp
+

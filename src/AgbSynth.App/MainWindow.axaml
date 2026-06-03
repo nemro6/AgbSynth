@@ -1,0 +1,68 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:AgbSynth.App.ViewModels"
+        x:Class="AgbSynth.App.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Width="1000"
+        Height="560"
+        MinWidth="920"
+        MinHeight="520"
+        Title="AgbSynth">
+  <Design.DataContext>
+    <vm:MainWindowViewModel />
+  </Design.DataContext>
+
+  <Grid RowDefinitions="Auto,*"
+        Background="#202020">
+    <Border Grid.Row="0"
+            Padding="10,8"
+            Background="#2B2B2B">
+      <DockPanel LastChildFill="True">
+        <Menu DockPanel.Dock="Left">
+          <MenuItem Header="_File">
+            <MenuItem Header="_Open ROM..." Click="OnOpenRomClicked" />
+          </MenuItem>
+        </Menu>
+        <TextBlock Text="AgbSynth"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   Foreground="#EEEEEE"
+                   FontFamily="Consolas"
+                   FontSize="12" />
+      </DockPanel>
+    </Border>
+
+    <TabControl Grid.Row="1">
+      <TabItem Header="ROM">
+        <Border Padding="12">
+          <StackPanel Spacing="8">
+            <TextBlock Text="{Binding RomStatus}"
+                       FontFamily="Consolas"
+                       FontSize="12" />
+            <TextBlock Text="MP2K discovery and song-table parsing will start here."
+                       FontFamily="Consolas"
+                       FontSize="12"
+                       Opacity="0.75" />
+          </StackPanel>
+        </Border>
+      </TabItem>
+
+      <TabItem Header="MIXER">
+        <Border Padding="12">
+          <TextBlock Text="Mixer shell placeholder"
+                     FontFamily="Consolas"
+                     FontSize="12" />
+        </Border>
+      </TabItem>
+
+      <TabItem Header="SETTING">
+        <Border Padding="12">
+          <TextBlock Text="Settings shell placeholder"
+                     FontFamily="Consolas"
+                     FontSize="12" />
+        </Border>
+      </TabItem>
+    </TabControl>
+  </Grid>
+</Window>
+
