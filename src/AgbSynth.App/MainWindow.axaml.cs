@@ -52,11 +52,10 @@ public partial class MainWindow : Window
         var saveFile = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
             Title = "Save AgbSynth Project",
-            SuggestedFileName = $"{Path.GetFileNameWithoutExtension(files[0].Name)}.agbsynth.json",
+            SuggestedFileName = $"{Path.GetFileNameWithoutExtension(files[0].Name)}.agbsynth",
             FileTypeChoices = new List<FilePickerFileType>
             {
-                new("AgbSynth project (*.agbsynth.json)") { Patterns = new[] { "*.agbsynth.json" } },
-                new("JSON file (*.json)") { Patterns = new[] { "*.json" } },
+                new("AgbSynth project (*.agbsynth)") { Patterns = new[] { "*.agbsynth" } },
                 FilePickerFileTypes.All
             }
         });
@@ -64,8 +63,10 @@ public partial class MainWindow : Window
         string? outputPath = saveFile?.Path?.LocalPath;
         if (string.IsNullOrWhiteSpace(outputPath))
             return;
+        if (!string.Equals(Path.GetExtension(outputPath), ".agbsynth", System.StringComparison.OrdinalIgnoreCase))
+            outputPath = Path.ChangeExtension(outputPath, ".agbsynth");
 
-        _viewModel.CreateProjectFile(
+        await _viewModel.CreateProjectFileAsync(
             outputPath,
             songTableOffset,
             addressWindow.SongTableAddressText ?? songTableOffset.ToString("X"));

@@ -1,3 +1,4 @@
+using System;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -46,14 +47,18 @@ public partial class SongTableAddressWindow : Window
     private void TryAccept()
     {
         string text = AddressTextBox.Text?.Trim() ?? string.Empty;
-        if (!GbaAddressParser.TryParseRomAddressOrOffset(text, _romLength, out int offset, out string? error))
+        string hexText = text.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+            ? text
+            : $"0x{text}";
+
+        if (!GbaAddressParser.TryParseRomAddressOrOffset(hexText, _romLength, out int offset, out string? error))
         {
             ErrorTextBlock.Text = error ?? "Invalid address.";
             return;
         }
 
         SongTableOffset = offset;
-        SongTableAddressText = text;
+        SongTableAddressText = hexText.ToUpperInvariant();
         Close(true);
     }
 }

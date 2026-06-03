@@ -23,7 +23,7 @@
         <Setter Property="Height" Value="24"/>
         <Setter Property="MinHeight" Value="24"/>
         <Setter Property="CornerRadius" Value="0"/>
-        <Setter Property="Padding" Value="8,0,0,0"/>
+        <Setter Property="Padding" Value="4,0,0,0"/>
       </Style>
       <Style Selector="Button">
         <Setter Property="FontFamily" Value="Consolas"/>
@@ -37,9 +37,15 @@
 
     <Grid RowDefinitions="Auto,8,Auto,*,Auto">
       <TextBlock Text="Song Table Address"/>
-      <TextBox x:Name="AddressTextBox"
-               Grid.Row="2"
-               Watermark="0x2C5638 or 0x082C5638"/>
+      <Grid Grid.Row="2"
+            ColumnDefinitions="Auto,*">
+        <TextBlock Text="0x"
+                   VerticalAlignment="Center"
+                   Margin="0,0,4,0"/>
+        <TextBox x:Name="AddressTextBox"
+                 Grid.Column="1"
+                 Watermark="2C5638 or 082C5638"/>
+      </Grid>
       <TextBlock x:Name="ErrorTextBlock"
                  Grid.Row="3"
                  VerticalAlignment="Center"
@@ -56,4 +62,3 @@
     </Grid>
   </Border>
 </Window>
-

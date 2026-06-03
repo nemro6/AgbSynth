@@ -41,7 +41,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
-    public bool CreateProjectFile(string outputPath, int songTableOffset, string songTableAddressText)
+    public async Task<bool> CreateProjectFileAsync(string outputPath, int songTableOffset, string songTableAddressText)
     {
         if (_loadedRom is null)
         {
@@ -51,8 +51,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            var project = AgbSynthProjectExporter.CreateFromRom(_loadedRom, songTableOffset, songTableAddressText);
-            AgbSynthProjectExporter.Save(outputPath, project);
+            RomStatus = "Creating project file...";
+            var rom = _loadedRom;
+            var project = await Task.Run(() =>
+            {
+                var created = AgbSynthProjectExporter.CreateFromRom(rom, songTableOffset, songTableAddressText);
+                AgbSynthProjectExporter.Save(outputPath, created);
+                return created;
+            });
             RomStatus = $"Project created: {Path.GetFileName(outputPath)} ({project.SongTable.ValidEntryCount:N0} song table entries)";
             return true;
         }
