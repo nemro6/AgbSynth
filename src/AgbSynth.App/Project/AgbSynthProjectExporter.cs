@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using AgbSynth.App.GBA;
 using AgbSynth.App.MP2K;
@@ -14,6 +15,7 @@ public static class AgbSynthProjectExporter
     public static AgbSynthProjectFile CreateFromRom(GbaRom rom, int songTableOffset, string songTableAddressText)
     {
         var songs = new List<SongTableEntryProjectInfo>();
+        var songHeaders = new List<SongHeaderProjectInfo>();
         for (int songId = 0; songId < MaxInitialSongTableEntries; songId++)
         {
             if (!Mp2kSongTableParser.TryReadEntry(rom, songTableOffset, songId, out var entry))
@@ -27,6 +29,24 @@ public static class AgbSynthProjectExporter
                 HeaderOffset = entry.HeaderOffset,
                 RawEntryHex = Convert.ToHexString(entry.RawEntry)
             });
+
+            if (Mp2kSongHeaderParser.TryReadHeader(rom, entry, out var header))
+            {
+                songHeaders.Add(new SongHeaderProjectInfo
+                {
+                    SongId = header.SongId,
+                    HeaderOffset = header.HeaderOffset,
+                    TrackCount = header.TrackCount,
+                    BlockCount = header.BlockCount,
+                    Priority = header.Priority,
+                    Reverb = header.Reverb,
+                    VoiceGroupPointer = FormatHex(header.VoiceGroupPointer),
+                    VoiceGroupOffset = header.VoiceGroupOffset,
+                    TrackPointers = header.TrackPointers.Select(FormatHex).ToList(),
+                    TrackOffsets = header.TrackOffsets.ToList(),
+                    RawHeaderHex = Convert.ToHexString(header.RawHeader)
+                });
+            }
         }
 
         return new AgbSynthProjectFile
@@ -46,7 +66,8 @@ public static class AgbSynthProjectExporter
                 EntrySize = Mp2kSongTableParser.DefaultEntrySize,
                 ValidEntryCount = songs.Count
             },
-            Songs = songs
+            Songs = songs,
+            SongHeaders = songHeaders
         };
     }
 

@@ -10,6 +10,7 @@ public sealed class AgbSynthProjectFile
     public RomProjectInfo Rom { get; set; } = new();
     public SongTableProjectInfo SongTable { get; set; } = new();
     public List<SongTableEntryProjectInfo> Songs { get; set; } = new();
+    public List<SongHeaderProjectInfo> SongHeaders { get; set; } = new();
 }
 
 public sealed class RomProjectInfo
@@ -38,3 +39,17 @@ public sealed class SongTableEntryProjectInfo
     public string RawEntryHex { get; set; } = string.Empty;
 }
 
+public sealed class SongHeaderProjectInfo
+{
+    public int SongId { get; set; }
+    public int HeaderOffset { get; set; }
+    public int TrackCount { get; set; }
+    public int BlockCount { get; set; }
+    public int Priority { get; set; }
+    public int Reverb { get; set; }
+    public string VoiceGroupPointer { get; set; } = string.Empty;
+    public int VoiceGroupOffset { get; set; }
+    public List<string> TrackPointers { get; set; } = new();
+    public List<int> TrackOffsets { get; set; } = new();
+    public string RawHeaderHex { get; set; } = string.Empty;
+}
