@@ -204,13 +204,13 @@ public static class AgbSynthProjectExporter
 
     public static void Save(string outputPath, AgbSynthProjectFile project)
     {
-        var options = new JsonSerializerOptions
-        {
-            WriteIndented = true
-        };
+        File.WriteAllBytes(outputPath, Serialize(project));
+    }
 
-        using var stream = File.Create(outputPath);
-        JsonSerializer.Serialize(stream, project, options);
+    public static byte[] Serialize(AgbSynthProjectFile project)
+    {
+        var options = new JsonSerializerOptions { WriteIndented = true };
+        return JsonSerializer.SerializeToUtf8Bytes(project, options);
     }
 
     private static string FormatHex(uint value) => $"0x{value:X8}";

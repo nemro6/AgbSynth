@@ -49,6 +49,7 @@ public sealed partial class MainWindowViewModel
         };
         _mixerTimer.Tick += (_, _) => TickMixer();
         _mixerTimer.Start();
+        InitializeProjectEditing();
     }
 
     private void TickMixer()

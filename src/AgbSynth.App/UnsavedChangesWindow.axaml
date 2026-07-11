@@ -1,0 +1,55 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="AgbSynth.App.UnsavedChangesWindow"
+        Width="420"
+        Height="178"
+        MinWidth="420"
+        MaxWidth="420"
+        MinHeight="178"
+        MaxHeight="178"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Title="Unsaved Changes"
+        Background="{DynamicResource AppWindowBackgroundBrush}">
+  <Border Padding="20"
+          Background="{DynamicResource AppWindowBackgroundBrush}">
+    <Border.Styles>
+      <Style Selector="TextBlock">
+        <Setter Property="FontFamily" Value="Consolas"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+      </Style>
+      <Style Selector="Button">
+        <Setter Property="MinWidth" Value="82"/>
+        <Setter Property="Height" Value="28"/>
+        <Setter Property="Padding" Value="12,0"/>
+        <Setter Property="FontFamily" Value="Consolas"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Background" Value="{DynamicResource AppControlBackgroundBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+      </Style>
+    </Border.Styles>
+
+    <Grid RowDefinitions="Auto,8,Auto,*,Auto">
+      <TextBlock Text="Save changes to the current project?"
+                 FontSize="13"
+                 FontWeight="SemiBold"/>
+      <TextBlock Grid.Row="2"
+                 Text="Unsaved edits will be lost if you continue without saving."
+                 FontSize="10"
+                 Foreground="{DynamicResource AppTextMutedBrush}"
+                 TextWrapping="Wrap"/>
+      <StackPanel Grid.Row="4"
+                  Orientation="Horizontal"
+                  HorizontalAlignment="Right"
+                  Spacing="8">
+        <Button Content="Discard"
+                Click="OnDiscardClicked"/>
+        <Button Content="Cancel"
+                Click="OnCancelClicked"/>
+        <Button Content="Save"
+                Click="OnSaveClicked"/>
+      </StackPanel>
+    </Grid>
+  </Border>
+</Window>

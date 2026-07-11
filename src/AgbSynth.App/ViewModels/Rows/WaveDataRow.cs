@@ -11,7 +11,7 @@ using Avalonia.Media;
 using AgbSynth.App.Project;
 
 namespace AgbSynth.App.ViewModels;
-public sealed class WaveDataRow : INotifyPropertyChanged, ITableRowVisualState
+public sealed class WaveDataRow : INotifyPropertyChanged, INotifyPropertyChanging, ITableRowVisualState
 {
     private static readonly JsonSerializerOptions AssetJsonOptions = new()
     {
@@ -239,6 +239,11 @@ public sealed class WaveDataRow : INotifyPropertyChanged, ITableRowVisualState
                 _loopEnd = unchecked((int)Math.Min(document.Header.Size, int.MaxValue));
             }
 
+            _label = string.IsNullOrWhiteSpace(document?.Label)
+                ? Path.GetFileNameWithoutExtension(FileName)
+                : document.Label;
+            _note = document?.Note ?? string.Empty;
+
             _dataHex = NormalizeHex(document?.DataHex ?? string.Empty);
             if (_loopEnd <= 0 || _loopEnd > SampleCount)
                 _loopEnd = SampleCount;
@@ -256,6 +261,9 @@ public sealed class WaveDataRow : INotifyPropertyChanged, ITableRowVisualState
             OnPropertyChanged(nameof(LoopStartText));
             OnPropertyChanged(nameof(LoopEndText));
             OnPropertyChanged(nameof(LoopText));
+            OnPropertyChanged(nameof(Label));
+            OnPropertyChanged(nameof(Note));
+            OnPropertyChanged(nameof(FileDisplay));
         }
         catch (IOException)
         {
@@ -293,13 +301,20 @@ public sealed class WaveDataRow : INotifyPropertyChanged, ITableRowVisualState
         if (!string.IsNullOrWhiteSpace(directory))
             Directory.CreateDirectory(directory);
 
+        File.WriteAllBytes(path, CreateAssetBytes());
+    }
+
+    public byte[] CreateAssetBytes()
+    {
         var document = new WaveDataAssetDocument
         {
             Header = ToSampleHeader(),
             DataFormat = DataFormat,
-            DataHex = Convert.ToHexString(DataBytes)
+            DataHex = Convert.ToHexString(DataBytes),
+            Label = Label,
+            Note = Note
         };
-        File.WriteAllText(path, JsonSerializer.Serialize(document, AssetJsonOptions));
+        return JsonSerializer.SerializeToUtf8Bytes(document, AssetJsonOptions);
     }
 
     private string? ResolveAbsolutePath()
@@ -348,10 +363,16 @@ public sealed class WaveDataRow : INotifyPropertyChanged, ITableRowVisualState
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
+    public event PropertyChangingEventHandler? PropertyChanging;
 
     private void OnPropertyChanged(string? propertyName)
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
+
+    private void OnPropertyChanging(string? propertyName)
+    {
+        PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(propertyName));
     }
 
     private bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
@@ -359,6 +380,7 @@ public sealed class WaveDataRow : INotifyPropertyChanged, ITableRowVisualState
         if (Equals(field, value))
             return false;
 
+        OnPropertyChanging(propertyName);
         field = value;
         OnPropertyChanged(propertyName);
         return true;
@@ -372,5 +394,7 @@ public sealed class WaveDataRow : INotifyPropertyChanged, ITableRowVisualState
         public SampleHeaderProjectInfo Header { get; set; } = new();
         public string DataFormat { get; set; } = "Signed8MonoPcm";
         public string DataHex { get; set; } = string.Empty;
+        public string Label { get; set; } = string.Empty;
+        public string Note { get; set; } = string.Empty;
     }
 }

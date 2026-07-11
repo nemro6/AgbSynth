@@ -11,7 +11,7 @@ using Avalonia.Media;
 using AgbSynth.App.Project;
 
 namespace AgbSynth.App.ViewModels;
-public sealed class SongTableEntryRow : INotifyPropertyChanged, ITableRowVisualState
+public sealed class SongTableEntryRow : INotifyPropertyChanged, INotifyPropertyChanging, ITableRowVisualState
 {
     private int _songId;
     private string _label = string.Empty;
@@ -46,6 +46,7 @@ public sealed class SongTableEntryRow : INotifyPropertyChanged, ITableRowVisualS
     public string HeaderPointer { get; init; } = string.Empty;
     public int HeaderOffset { get; init; }
     public string HeaderOffsetHex => $"0x{HeaderOffset:X}";
+    public string RawEntryHex { get; init; } = string.Empty;
 
     public string SongHeaderFilePath
     {
@@ -128,6 +129,7 @@ public sealed class SongTableEntryRow : INotifyPropertyChanged, ITableRowVisualS
             TableOffset = song.TableOffset,
             HeaderPointer = song.HeaderPointer,
             HeaderOffset = song.HeaderOffset,
+            RawEntryHex = song.RawEntryHex,
             SongHeaderFilePath = string.IsNullOrWhiteSpace(songHeaderFilePath) ? song.SongHeaderFilePath : songHeaderFilePath,
             SongHeaderDisplay = songHeaderDisplay ?? string.Empty,
             Group1 = song.Group1,
@@ -143,6 +145,7 @@ public sealed class SongTableEntryRow : INotifyPropertyChanged, ITableRowVisualS
             Label = Label,
             HeaderPointer = HeaderPointer,
             HeaderOffset = HeaderOffset,
+            RawEntryHex = RawEntryHex,
             SongHeaderFilePath = SongHeaderFilePath,
             SongHeaderDisplay = SongHeaderDisplay,
             Group1 = Group1,
@@ -151,11 +154,34 @@ public sealed class SongTableEntryRow : INotifyPropertyChanged, ITableRowVisualS
         };
     }
 
+    public SongTableEntryProjectInfo ToProjectInfo()
+    {
+        return new SongTableEntryProjectInfo
+        {
+            SongId = SongId,
+            Label = Label,
+            TableOffset = TableOffset,
+            HeaderPointer = HeaderPointer,
+            HeaderOffset = HeaderOffset,
+            SongHeaderFilePath = SongHeaderFilePath,
+            Group1 = Group1,
+            Group2 = Group2,
+            Note = Note,
+            RawEntryHex = RawEntryHex
+        };
+    }
+
     public event PropertyChangedEventHandler? PropertyChanged;
+    public event PropertyChangingEventHandler? PropertyChanging;
 
     private void OnPropertyChanged(string? propertyName)
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
+
+    private void OnPropertyChanging(string? propertyName)
+    {
+        PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(propertyName));
     }
 
     private bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
@@ -163,6 +189,7 @@ public sealed class SongTableEntryRow : INotifyPropertyChanged, ITableRowVisualS
         if (Equals(field, value))
             return false;
 
+        OnPropertyChanging(propertyName);
         field = value;
         OnPropertyChanged(propertyName);
         return true;

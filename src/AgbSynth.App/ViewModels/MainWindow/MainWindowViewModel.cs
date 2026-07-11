@@ -359,10 +359,24 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
             if (SelectedKeySplit is null)
                 return;
 
+            KeySplitProjectInfo keySplit = SelectedKeySplit.KeySplit;
+            string oldValue = keySplit.KeyMapHex;
             byte[] keyMap = DecodeVoiceTableHex(value ?? string.Empty);
-            SelectedKeySplit.KeySplit.KeyMapHex = EncodeVoiceTableHex(keyMap);
+            string newValue = EncodeVoiceTableHex(keyMap);
+            if (string.Equals(oldValue, newValue, StringComparison.Ordinal))
+                return;
+
+            keySplit.KeyMapHex = newValue;
             RefreshKeySplitUsage();
             OnPropertyChanged(nameof(SelectedKeySplitKeyMapHex));
+            RecordProjectValueEdit(
+                keySplit,
+                nameof(KeySplitProjectInfo.KeyMapHex),
+                "Edit KeySplit range",
+                oldValue,
+                newValue,
+                map => keySplit.KeyMapHex = map,
+                allowMerge: true);
         }
     }
 
@@ -460,7 +474,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
             SelectedDrumSet = null;
             SelectedWaveMemory = null;
             SelectedWaveData = null;
-            _currentProjectPath = null;
+            CloseProjectSession();
             StopAllPreviewNotes();
             OnPropertyChanged(nameof(LoadedRom));
             return true;
@@ -495,7 +509,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
             SelectedWaveMemory = null;
             SelectedWaveData = null;
             SelectedWaveMemory = null;
-            _currentProjectPath = null;
+            CloseProjectSession();
             StopAllPreviewNotes();
             OnPropertyChanged(nameof(LoadedRom));
             return false;
@@ -530,13 +544,14 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
                 AgbSynthProjectExporter.Save(outputPath, created);
                 return (Project: created, MidiCount: midiCount, VoiceGroupAssetCount: voiceGroupAssetCount, SequenceAssetCount: sequenceAssetCount);
             });
-            _currentProjectPath = outputPath;
+            BeginProjectSession(result.Project, outputPath);
             LoadSongTable(result.Project);
             LoadSequences(result.Project);
             LoadVoiceGroups(result.Project);
             LoadVoiceTables(result.Project);
             LoadWaveMemory(result.Project);
             LoadWaveData(result.Project);
+            CompleteProjectSession();
             RomStatus = $"Project created: {Path.GetFileName(outputPath)} ({result.Project.SongTable.ValidEntryCount:N0} song table entries)";
             SongTableStatus = $"Loaded {result.Project.Songs.Count:N0} entries. Exported {result.Project.SongTable.FilePath}.";
             SequenceStatus = $"Loaded {result.Project.SongHeaders.Count:N0} headers. Exported {result.MidiCount:N0} MIDI files.";
@@ -582,7 +597,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
             StopAllPreviewNotes();
             _loadedRom = null;
             OnPropertyChanged(nameof(LoadedRom));
-            _currentProjectPath = outputPath;
+            BeginProjectSession(project, outputPath);
 
             LoadSongTable(project);
             LoadSequences(project);
@@ -590,6 +605,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
             LoadVoiceTables(project);
             LoadWaveMemory(project);
             LoadWaveData(project);
+            CompleteProjectSession();
 
             string projectName = Path.GetFileName(outputPath);
             RomStatus = $"New project created: {projectName}";
@@ -628,7 +644,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
             var project = await Task.Run(() => AgbSynthProjectLoader.Load(projectPath));
             _loadedRom = null;
             OnPropertyChanged(nameof(LoadedRom));
-            _currentProjectPath = projectPath;
+            BeginProjectSession(project, projectPath);
 
             LoadSongTable(project);
             LoadSequences(project);
@@ -636,6 +652,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
             LoadVoiceTables(project);
             LoadWaveMemory(project);
             LoadWaveData(project);
+            CompleteProjectSession();
 
             string projectName = Path.GetFileName(projectPath);
             RomStatus = $"Project opened: {projectName}";
@@ -1305,6 +1322,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
         if (index < 0 || index >= selected.KeySplit.Regions.Count)
             return;
 
+        KeySplitProjectInfo oldValue = CloneKeySplitProjectInfo(selected.KeySplit);
         int oldCount = selected.KeySplit.Regions.Count;
         byte[] keyMap = EnsureKeySplitKeyMap(selected.KeySplit, oldCount, createIfEmpty: false);
         selected.KeySplit.Regions.RemoveAt(index);
@@ -1333,6 +1351,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
         }
 
         KeySplitStatus = $"Deleted KeySplit region {index:D3}.";
+        RecordKeySplitStateEdit(selected.KeySplit, oldValue, "Delete KeySplit region");
     }
 
     public void SelectPreviousVoice()
@@ -1369,9 +1388,11 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
         if (row is null || _copiedVoice is null)
             return;
 
+        VoiceProjectInfo oldValue = CloneVoiceProjectInfo(row.ToProjectInfo());
         var copy = CloneVoiceProjectInfo(_copiedVoice);
         copy.Index = row.Index;
-        row.ApplyProjectInfo(copy);
+        ApplyProjectMutationWithoutHistory(() => row.ApplyProjectInfo(copy));
+        RecordVoiceStateEdit(row, oldValue, "Paste voice");
         SetVoiceTableStatus(row, $"Pasted Voice to {row.Index:D3}.");
     }
 
@@ -1380,7 +1401,9 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
         if (row is null)
             return;
 
-        row.ApplyProjectInfo(CreateDefaultVoice(row.Index));
+        VoiceProjectInfo oldValue = CloneVoiceProjectInfo(row.ToProjectInfo());
+        ApplyProjectMutationWithoutHistory(() => row.ApplyProjectInfo(CreateDefaultVoice(row.Index)));
+        RecordVoiceStateEdit(row, oldValue, "Reset voice");
         SetVoiceTableStatus(row, $"Reset Voice {row.Index:D3} to Square 1.");
     }
 
@@ -1398,22 +1421,27 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
         if (string.IsNullOrWhiteSpace(selectedPath))
             return;
 
+        VoiceProjectInfo oldValue = CloneVoiceProjectInfo(row.ToProjectInfo());
         string relativePath = ToProjectRelativePath(selectedPath);
-        row.DataFilePath = relativePath;
-        if (row.Type == 0x40 && KeySplitOptions.FirstOrDefault(option => AssetPathMatches(option.FilePath, relativePath)) is { } keySplit)
+        ApplyProjectMutationWithoutHistory(() =>
         {
-            var voice = row.ToProjectInfo();
-            voice.KeySplit = keySplit.KeySplit;
-            voice.DrumSet = null;
-            row.ApplyProjectInfo(voice);
-        }
-        else if (row.Type == 0x80 && DrumSetOptions.FirstOrDefault(option => AssetPathMatches(option.FilePath, relativePath)) is { } drumSet)
-        {
-            var voice = row.ToProjectInfo();
-            voice.DrumSet = drumSet.DrumSet;
-            voice.KeySplit = null;
-            row.ApplyProjectInfo(voice);
-        }
+            row.DataFilePath = relativePath;
+            if (row.Type == 0x40 && KeySplitOptions.FirstOrDefault(option => AssetPathMatches(option.FilePath, relativePath)) is { } keySplit)
+            {
+                var voice = row.ToProjectInfo();
+                voice.KeySplit = keySplit.KeySplit;
+                voice.DrumSet = null;
+                row.ApplyProjectInfo(voice);
+            }
+            else if (row.Type == 0x80 && DrumSetOptions.FirstOrDefault(option => AssetPathMatches(option.FilePath, relativePath)) is { } drumSet)
+            {
+                var voice = row.ToProjectInfo();
+                voice.DrumSet = drumSet.DrumSet;
+                voice.KeySplit = null;
+                row.ApplyProjectInfo(voice);
+            }
+        });
+        RecordVoiceStateEdit(row, oldValue, "Set voice data");
         SetVoiceTableStatus(row, $"Set Voice {row.Index:D3} data to {Path.GetFileName(selectedPath)}.");
     }
 
@@ -1431,8 +1459,25 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
         if (SelectedWaveData is not { } row)
             return;
 
-        row.Loops = loops;
-        row.SetLoopPoints(loopStart, loopEnd);
+        var oldValue = (row.LoopStart, row.LoopEnd, row.Loops);
+        ApplyProjectMutationWithoutHistory(() =>
+        {
+            row.Loops = loops;
+            row.SetLoopPoints(loopStart, loopEnd);
+        });
+        var newValue = (row.LoopStart, row.LoopEnd, row.Loops);
+        RecordProjectValueEdit(
+            row,
+            "LoopPoints",
+            "Edit loop points",
+            oldValue,
+            newValue,
+            value =>
+            {
+                row.Loops = value.Loops;
+                row.SetLoopPoints(value.LoopStart, value.LoopEnd);
+            },
+            allowMerge: true);
     }
 
     public void InsertWaveMemoryBelowSelected(bool copySelected, string assetPath)
@@ -1574,6 +1619,12 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
         if (index < 0 || nextIndex == index)
             return;
 
+        KeySplitProjectInfo? oldKeySplit = table.Kind == VoiceTableKind.KeySplit && SelectedKeySplit is not null
+            ? CloneKeySplitProjectInfo(SelectedKeySplit.KeySplit)
+            : null;
+        List<VoiceProjectInfo>? oldVoices = oldKeySplit is null
+            ? table.Voices.Select(CloneVoiceProjectInfo).ToList()
+            : null;
         table.Rows.Move(index, nextIndex);
         table.Voices.RemoveAt(index);
         table.Voices.Insert(nextIndex, selected.Source ?? selected.ToProjectInfo());
@@ -1582,6 +1633,10 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
         ReindexVoiceRows(table.Rows, table.UpdateUsage);
         ReindexVoices(table.Voices);
         SelectVoiceInTable(table, selected);
+        if (oldKeySplit is not null && SelectedKeySplit is not null)
+            RecordKeySplitStateEdit(SelectedKeySplit.KeySplit, oldKeySplit, "Move KeySplit region");
+        else if (oldVoices is not null)
+            RecordVoiceListStateEdit(table.Voices, oldVoices, "Move voice");
     }
 
     private void InsertKeySplitRegion(VoiceRow? row, bool insertBelow, VoiceProjectInfo? voiceToInsert)
@@ -1589,6 +1644,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
         if (SelectedKeySplit is not { } selected)
             return;
 
+        KeySplitProjectInfo oldValue = CloneKeySplitProjectInfo(selected.KeySplit);
         int oldCount = selected.KeySplit.Regions.Count;
         int sourceIndex = row is null
             ? (SelectedKeySplitVoice is null ? -1 : KeySplitRows.IndexOf(SelectedKeySplitVoice))
@@ -1626,6 +1682,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
         if (insertIndex < KeySplitRows.Count)
             SelectedKeySplitVoice = KeySplitRows[insertIndex];
         KeySplitStatus = $"Inserted KeySplit region {insertIndex:D3}.";
+        RecordKeySplitStateEdit(selected.KeySplit, oldValue, "Insert KeySplit region");
     }
     private void OnSelectedVoicePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -2432,6 +2489,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
                 : Path.GetDirectoryName(_currentProjectPath) ?? string.Empty;
             row.DataFileDisplayResolver = GetAssetFileDisplay;
             Voices.Add(row);
+            TrackEditableVoiceRow(row);
         }
 
         SelectedVoice = Voices.FirstOrDefault(v => v.SampleSize is not null) ?? Voices.FirstOrDefault();
@@ -2457,6 +2515,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
             row.DataFileDisplayResolver = GetAssetFileDisplay;
             row.UsageText = GetKeySplitRegionRangeText(i, keyMap, selected.KeySplit.Regions.Count);
             KeySplitRows.Add(row);
+            TrackEditableVoiceRow(row);
         }
 
         SelectedKeySplitVoice = KeySplitRows.FirstOrDefault();
@@ -2491,6 +2550,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
             row.DataFileDisplayResolver = GetAssetFileDisplay;
             row.UsageText = NoteNameFromMidi(entry.Index);
             DrumSetRows.Add(row);
+            TrackEditableVoiceRow(row);
         }
 
         SelectedDrumSetVoice = DrumSetRows.FirstOrDefault();

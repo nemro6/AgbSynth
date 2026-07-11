@@ -11,7 +11,7 @@ using Avalonia.Media;
 using AgbSynth.App.Project;
 
 namespace AgbSynth.App.ViewModels;
-public sealed class WaveMemoryRow : INotifyPropertyChanged, ITableRowVisualState
+public sealed class WaveMemoryRow : INotifyPropertyChanged, INotifyPropertyChanging, ITableRowVisualState
 {
     private static readonly JsonSerializerOptions MetadataJsonOptions = new()
     {
@@ -170,6 +170,12 @@ public sealed class WaveMemoryRow : INotifyPropertyChanged, ITableRowVisualState
         }
     }
 
+    public byte[] CreateMetadataBytes()
+    {
+        var metadata = new WaveMemoryMetadata { Label = Label, Note = Note };
+        return JsonSerializer.SerializeToUtf8Bytes(metadata, MetadataJsonOptions);
+    }
+
     private void ReloadMetadata()
     {
         _label = Path.GetFileNameWithoutExtension(FileName);
@@ -310,10 +316,16 @@ public sealed class WaveMemoryRow : INotifyPropertyChanged, ITableRowVisualState
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
+    public event PropertyChangingEventHandler? PropertyChanging;
 
     private void OnPropertyChanged(string? propertyName)
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
+
+    private void OnPropertyChanging(string? propertyName)
+    {
+        PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(propertyName));
     }
 
     private bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
@@ -321,6 +333,7 @@ public sealed class WaveMemoryRow : INotifyPropertyChanged, ITableRowVisualState
         if (Equals(field, value))
             return false;
 
+        OnPropertyChanging(propertyName);
         field = value;
         OnPropertyChanged(propertyName);
         return true;

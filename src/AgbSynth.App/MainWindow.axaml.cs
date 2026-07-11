@@ -30,6 +30,8 @@ public partial class MainWindow : Window
     private VoiceRow? _baseKeyDragVoice;
     private double _baseKeyDragStartX;
     private int _baseKeyDragStartKey;
+    private bool _allowWindowClose;
+    private bool _closeConfirmationOpen;
 
     public MainWindow()
     {
@@ -58,6 +60,7 @@ public partial class MainWindow : Window
         ApplyThemeVariant();
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         MoveSideNavIndicator(MainTabs.SelectedIndex, animate: false);
+        Closing += OnWindowClosing;
         Closed += (_, _) =>
         {
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
@@ -73,6 +76,8 @@ public partial class MainWindow : Window
     {
         if (e.PropertyName == nameof(MainWindowViewModel.SelectedThemeColor))
             ApplyThemeVariant();
+        else if (e.PropertyName == nameof(MainWindowViewModel.WindowTitle))
+            Title = _viewModel.WindowTitle;
     }
 
     private void ApplyThemeVariant()
@@ -107,6 +112,9 @@ public partial class MainWindow : Window
         });
 
         if (files.Count == 0)
+            return;
+
+        if (!await ConfirmUnsavedChangesAsync())
             return;
 
         if (!await _viewModel.LoadRomAsync(files[0]))
@@ -172,6 +180,9 @@ public partial class MainWindow : Window
         if (!string.Equals(Path.GetExtension(outputPath), ".agbsynth", StringComparison.OrdinalIgnoreCase))
             outputPath = Path.ChangeExtension(outputPath, ".agbsynth");
 
+        if (!await ConfirmUnsavedChangesAsync())
+            return;
+
         if (await _viewModel.CreateBlankProjectAsync(outputPath))
             Title = $"{Path.GetFileName(outputPath)} - AgbSynth";
     }
@@ -199,13 +210,100 @@ public partial class MainWindow : Window
         if (string.IsNullOrWhiteSpace(projectPath))
             return;
 
+        if (!await ConfirmUnsavedChangesAsync())
+            return;
+
         if (await _viewModel.LoadProjectFileAsync(projectPath))
             Title = $"{Path.GetFileName(projectPath)} - AgbSynth";
     }
 
     private async void OnRefreshProjectClicked(object? sender, RoutedEventArgs e)
     {
+        if (!await ConfirmUnsavedChangesAsync())
+            return;
+
         await _viewModel.RefreshProjectAsync();
+    }
+
+    private async void OnSaveProjectClicked(object? sender, RoutedEventArgs e)
+    {
+        await _viewModel.SaveProjectAsync();
+    }
+
+    private void OnUndoProjectClicked(object? sender, RoutedEventArgs e)
+    {
+        _viewModel.UndoProjectEdit();
+    }
+
+    private void OnRedoProjectClicked(object? sender, RoutedEventArgs e)
+    {
+        _viewModel.RedoProjectEdit();
+    }
+
+    private async void OnWindowKeyDown(object? sender, KeyEventArgs e)
+    {
+        if ((e.KeyModifiers & KeyModifiers.Control) == 0)
+            return;
+
+        if (e.Key == Key.S)
+        {
+            e.Handled = true;
+            await _viewModel.SaveProjectAsync();
+        }
+        else if (e.Key == Key.Z && (e.KeyModifiers & KeyModifiers.Shift) != 0)
+        {
+            e.Handled = true;
+            _viewModel.RedoProjectEdit();
+        }
+        else if (e.Key == Key.Z)
+        {
+            e.Handled = true;
+            _viewModel.UndoProjectEdit();
+        }
+        else if (e.Key == Key.Y)
+        {
+            e.Handled = true;
+            _viewModel.RedoProjectEdit();
+        }
+    }
+
+    private async void OnWindowClosing(object? sender, WindowClosingEventArgs e)
+    {
+        if (_allowWindowClose || !_viewModel.IsProjectDirty)
+            return;
+
+        e.Cancel = true;
+        if (_closeConfirmationOpen)
+            return;
+
+        _closeConfirmationOpen = true;
+        try
+        {
+            if (!await ConfirmUnsavedChangesAsync())
+                return;
+
+            _allowWindowClose = true;
+            Close();
+        }
+        finally
+        {
+            _closeConfirmationOpen = false;
+        }
+    }
+
+    private async Task<bool> ConfirmUnsavedChangesAsync()
+    {
+        if (!_viewModel.IsProjectDirty)
+            return true;
+
+        var window = new UnsavedChangesWindow();
+        UnsavedChangesChoice choice = await window.ShowDialog<UnsavedChangesChoice>(this);
+        return choice switch
+        {
+            UnsavedChangesChoice.Save => await _viewModel.SaveProjectAsync(),
+            UnsavedChangesChoice.Discard => true,
+            _ => false
+        };
     }
 
     private void OnTitleBarPointerPressed(object? sender, PointerPressedEventArgs e)

@@ -11,7 +11,7 @@ using Avalonia.Media;
 using AgbSynth.App.Project;
 
 namespace AgbSynth.App.ViewModels;
-public sealed class SequenceHeaderRow : INotifyPropertyChanged, ITableRowVisualState
+public sealed class SequenceHeaderRow : INotifyPropertyChanged, INotifyPropertyChanging, ITableRowVisualState
 {
     private int _trackCount;
     private int _blockCount;
@@ -220,10 +220,16 @@ public sealed class SequenceHeaderRow : INotifyPropertyChanged, ITableRowVisualS
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
+    public event PropertyChangingEventHandler? PropertyChanging;
 
     private void OnPropertyChanged(string? propertyName)
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
+
+    private void OnPropertyChanging(string? propertyName)
+    {
+        PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(propertyName));
     }
 
     private bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
@@ -231,6 +237,7 @@ public sealed class SequenceHeaderRow : INotifyPropertyChanged, ITableRowVisualS
         if (Equals(field, value))
             return false;
 
+        OnPropertyChanging(propertyName);
         field = value;
         OnPropertyChanged(propertyName);
         return true;

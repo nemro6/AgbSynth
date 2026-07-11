@@ -11,7 +11,7 @@ using Avalonia.Media;
 using AgbSynth.App.Project;
 
 namespace AgbSynth.App.ViewModels;
-public sealed class VoiceRow : INotifyPropertyChanged, ITableRowVisualState
+public sealed class VoiceRow : INotifyPropertyChanged, INotifyPropertyChanging, ITableRowVisualState
 {
     public static IReadOnlyList<VoiceTypeOption> TypeOptions { get; } =
     [
@@ -183,11 +183,7 @@ public sealed class VoiceRow : INotifyPropertyChanged, ITableRowVisualState
 
             if (IsPsgNoiseDataVisible && Source is not null)
             {
-                Source.PsgNoise ??= new PsgNoiseProjectInfo();
-                Source.PsgNoise.PinkNoise = value.Value == 1;
-                OnPropertyChanged(nameof(SelectedFormatOption));
-                OnPropertyChanged(nameof(SelectedNoiseKindOption));
-                OnPropertyChanged(nameof(DataDisplay));
+                SelectedNoiseKindOption = NoiseFormatOptions[value.Value == 1 ? 1 : 0];
             }
         }
     }
@@ -199,6 +195,11 @@ public sealed class VoiceRow : INotifyPropertyChanged, ITableRowVisualState
             if (value is null || Source is null)
                 return;
 
+            VoiceDataOption oldValue = SelectedNoiseKindOption ?? NoiseFormatOptions[0];
+            if (oldValue.Value == value.Value)
+                return;
+
+            OnPropertyChanging(nameof(SelectedNoiseKindOption));
             Source.PsgNoise ??= new PsgNoiseProjectInfo();
             Source.PsgNoise.PinkNoise = value.Value == 1;
             OnPropertyChanged(nameof(SelectedNoiseKindOption));
@@ -413,6 +414,11 @@ public sealed class VoiceRow : INotifyPropertyChanged, ITableRowVisualState
             if (value is null)
                 return;
 
+            VoiceDataOption oldValue = SelectedSquareDutyOption ?? SquareDutyOptions[2];
+            if (oldValue.Value == value.Value)
+                return;
+
+            OnPropertyChanging(nameof(SelectedSquareDutyOption));
             _squareDutyIndex = Math.Clamp(value.Value, 0, 3);
             if (Source is not null)
             {
@@ -444,6 +450,11 @@ public sealed class VoiceRow : INotifyPropertyChanged, ITableRowVisualState
             if (value is null)
                 return;
 
+            VoiceDataOption oldValue = SelectedNoiseControlOption ?? NoiseControlOptions[0];
+            if (oldValue.Value == value.Value)
+                return;
+
+            OnPropertyChanging(nameof(SelectedNoiseControlOption));
             _noiseControl = Math.Clamp(value.Value, 0, 255);
             if (Source is not null)
             {
@@ -646,10 +657,16 @@ public sealed class VoiceRow : INotifyPropertyChanged, ITableRowVisualState
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
+    public event PropertyChangingEventHandler? PropertyChanging;
 
     private void OnPropertyChanged(string? propertyName)
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
+
+    private void OnPropertyChanging(string? propertyName)
+    {
+        PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(propertyName));
     }
 
     private bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
@@ -657,6 +674,7 @@ public sealed class VoiceRow : INotifyPropertyChanged, ITableRowVisualState
         if (Equals(field, value))
             return false;
 
+        OnPropertyChanging(propertyName);
         field = value;
         OnPropertyChanged(propertyName);
         return true;

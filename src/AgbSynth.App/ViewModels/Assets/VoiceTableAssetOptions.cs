@@ -11,7 +11,7 @@ using Avalonia.Media;
 using AgbSynth.App.Project;
 
 namespace AgbSynth.App.ViewModels;
-public sealed class VoiceGroupOption : INotifyPropertyChanged
+public sealed class VoiceGroupOption : INotifyPropertyChanged, INotifyPropertyChanging
 {
     private string _label = string.Empty;
 
@@ -62,10 +62,16 @@ public sealed class VoiceGroupOption : INotifyPropertyChanged
     public override string ToString() => Display;
 
     public event PropertyChangedEventHandler? PropertyChanged;
+    public event PropertyChangingEventHandler? PropertyChanging;
 
     private void OnPropertyChanged(string? propertyName)
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
+
+    private void OnPropertyChanging(string? propertyName)
+    {
+        PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(propertyName));
     }
 
     private bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
@@ -73,6 +79,7 @@ public sealed class VoiceGroupOption : INotifyPropertyChanged
         if (Equals(field, value))
             return false;
 
+        OnPropertyChanging(propertyName);
         field = value;
         OnPropertyChanged(propertyName);
         return true;
@@ -88,7 +95,7 @@ public sealed class VoiceGroupOption : INotifyPropertyChanged
     }
 }
 
-public sealed class KeySplitOption : INotifyPropertyChanged
+public sealed class KeySplitOption : INotifyPropertyChanged, INotifyPropertyChanging
 {
     private string _label = string.Empty;
 
@@ -130,10 +137,16 @@ public sealed class KeySplitOption : INotifyPropertyChanged
     public override string ToString() => Display;
 
     public event PropertyChangedEventHandler? PropertyChanged;
+    public event PropertyChangingEventHandler? PropertyChanging;
 
     private void OnPropertyChanged(string? propertyName)
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
+
+    private void OnPropertyChanging(string? propertyName)
+    {
+        PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(propertyName));
     }
 
     private bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
@@ -141,6 +154,7 @@ public sealed class KeySplitOption : INotifyPropertyChanged
         if (Equals(field, value))
             return false;
 
+        OnPropertyChanging(propertyName);
         field = value;
         OnPropertyChanged(propertyName);
         return true;
@@ -156,7 +170,7 @@ public sealed class KeySplitOption : INotifyPropertyChanged
     }
 }
 
-public sealed class DrumSetOption : INotifyPropertyChanged
+public sealed class DrumSetOption : INotifyPropertyChanged, INotifyPropertyChanging
 {
     private string _label = string.Empty;
 
@@ -198,10 +212,16 @@ public sealed class DrumSetOption : INotifyPropertyChanged
     public override string ToString() => Display;
 
     public event PropertyChangedEventHandler? PropertyChanged;
+    public event PropertyChangingEventHandler? PropertyChanging;
 
     private void OnPropertyChanged(string? propertyName)
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
+
+    private void OnPropertyChanging(string? propertyName)
+    {
+        PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(propertyName));
     }
 
     private bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
@@ -209,6 +229,7 @@ public sealed class DrumSetOption : INotifyPropertyChanged
         if (Equals(field, value))
             return false;
 
+        OnPropertyChanging(propertyName);
         field = value;
         OnPropertyChanged(propertyName);
         return true;
