@@ -1,0 +1,58 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:AgbSynth.App.ViewModels"
+        x:Class="AgbSynth.App.VoiceTableWindow"
+        x:DataType="vm:VoiceTableWindowViewModel"
+        Width="780"
+        Height="420"
+        MinWidth="640"
+        MinHeight="320"
+        Background="{DynamicResource AppSurfaceAltBrush}"
+        Title="{Binding Title}">
+  <Border Padding="12">
+    <Border.Styles>
+      <Style Selector="TextBlock">
+        <Setter Property="FontFamily" Value="Consolas"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+      </Style>
+    </Border.Styles>
+
+    <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
+      <TextBlock Text="{Binding HeaderText}"
+                 TextTrimming="CharacterEllipsis"/>
+      <TextBlock Grid.Row="1"
+                 Text="{Binding FilePath}"
+                 Opacity="0.75"
+                 TextTrimming="CharacterEllipsis"/>
+      <DataGrid Grid.Row="2"
+                ItemsSource="{Binding Rows}"
+                AutoGenerateColumns="False"
+                GridLinesVisibility="All"
+                HeadersVisibility="Column"
+                CanUserResizeColumns="True"
+                CanUserSortColumns="False"
+                Background="{DynamicResource AppSurfaceAltBrush}"
+                Foreground="{DynamicResource AppTextPrimaryBrush}"
+                BorderBrush="{DynamicResource AppBorderBrush}"
+                FontFamily="Consolas"
+                FontSize="9"
+                RowHeight="20"
+                ColumnHeaderHeight="20">
+        <DataGrid.Columns>
+          <DataGridTextColumn Header="Index" Binding="{Binding IndexHex}" IsReadOnly="True" Width="72"/>
+          <DataGridTextColumn Header="Type" Binding="{Binding TypeName, Mode=TwoWay}" Width="128"/>
+          <DataGridTextColumn Header="TypeID" Binding="{Binding TypeHex}" IsReadOnly="True" Width="64"/>
+          <DataGridTextColumn Header="Data" Binding="{Binding DataPointer, Mode=TwoWay}" Width="128"/>
+          <DataGridTextColumn Header="Offset" Binding="{Binding DataOffsetHex}" IsReadOnly="True" Width="92"/>
+          <DataGridTextColumn Header="Key" Binding="{Binding Key}" IsReadOnly="True" Width="52"/>
+          <DataGridTextColumn Header="A" Binding="{Binding Attack, Mode=TwoWay}" Width="48"/>
+          <DataGridTextColumn Header="D" Binding="{Binding Decay, Mode=TwoWay}" Width="48"/>
+          <DataGridTextColumn Header="S" Binding="{Binding Sustain, Mode=TwoWay}" Width="48"/>
+          <DataGridTextColumn Header="R" Binding="{Binding Release, Mode=TwoWay}" Width="48"/>
+          <DataGridTextColumn Header="Sample Size" Binding="{Binding SampleSize}" IsReadOnly="True" Width="96"/>
+        </DataGrid.Columns>
+      </DataGrid>
+    </Grid>
+  </Border>
+</Window>

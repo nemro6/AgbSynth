@@ -2,20 +2,20 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="AgbSynth.App.SongTableAddressWindow"
         Width="360"
-        Height="150"
+        Height="238"
         MinWidth="360"
         MaxWidth="360"
-        MinHeight="150"
-        MaxHeight="150"
+        MinHeight="238"
+        MaxHeight="238"
         CanResize="False"
-        Title="Song Table Address"
-        Background="#222222">
+        Title="MP2K Import Options"
+        Background="{DynamicResource AppSurfaceAltBrush}">
   <Border Padding="12">
     <Border.Styles>
       <Style Selector="TextBlock">
         <Setter Property="FontFamily" Value="Consolas"/>
         <Setter Property="FontSize" Value="11"/>
-        <Setter Property="Foreground" Value="#E6E6E6"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
       </Style>
       <Style Selector="TextBox">
         <Setter Property="FontFamily" Value="Consolas"/>
@@ -33,11 +33,28 @@
         <Setter Property="MinHeight" Value="24"/>
         <Setter Property="CornerRadius" Value="0"/>
       </Style>
+      <Style Selector="ComboBox">
+        <Setter Property="FontFamily" Value="Consolas"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Height" Value="24"/>
+        <Setter Property="MinHeight" Value="24"/>
+        <Setter Property="CornerRadius" Value="0"/>
+      </Style>
     </Border.Styles>
 
-    <Grid RowDefinitions="Auto,8,Auto,*,Auto">
-      <TextBlock Text="Song Table Address"/>
-      <Grid Grid.Row="2"
+    <Grid RowDefinitions="Auto,4,Auto,10,Auto,4,Auto,10,Auto,*,Auto">
+      <TextBlock Text="Read Mode"/>
+      <ComboBox x:Name="ReadModeComboBox"
+                Grid.Row="2"
+                SelectionChanged="OnReadModeSelectionChanged">
+        <ComboBoxItem Content="Manual SongTable Address"/>
+        <ComboBoxItem Content="Automatic MP2K Discovery"/>
+      </ComboBox>
+
+      <TextBlock Grid.Row="4"
+                 Text="SongTable Address"/>
+      <Grid x:Name="AddressInputGrid"
+            Grid.Row="6"
             ColumnDefinitions="Auto,*">
         <TextBlock Text="0x"
                    VerticalAlignment="Center"
@@ -46,11 +63,17 @@
                  Grid.Column="1"
                  Watermark="2C5638 or 082C5638"/>
       </Grid>
+      <CheckBox x:Name="IncludeUnreferencedCheckBox"
+                Grid.Row="8"
+                Content="Include unreferenced VoiceGroups"
+                FontFamily="Consolas"
+                FontSize="11"/>
+
       <TextBlock x:Name="ErrorTextBlock"
-                 Grid.Row="3"
+                 Grid.Row="9"
                  VerticalAlignment="Center"
                  Foreground="#FF8A8A"/>
-      <StackPanel Grid.Row="4"
+      <StackPanel Grid.Row="10"
                   Orientation="Horizontal"
                   Spacing="8"
                   HorizontalAlignment="Right">

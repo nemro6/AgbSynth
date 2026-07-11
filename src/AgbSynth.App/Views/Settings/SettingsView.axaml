@@ -1,0 +1,134 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:AgbSynth.App.ViewModels"
+             x:Class="AgbSynth.App.Views.Settings.SettingsView"
+             x:DataType="vm:MainWindowViewModel">
+<Border Padding="28" Background="{DynamicResource AppWindowBackgroundBrush}">
+  <Grid Width="780"
+        HorizontalAlignment="Left"
+        RowDefinitions="Auto,18,Auto,16,Auto"
+        ColumnDefinitions="382,16,382">
+    <StackPanel Grid.Row="0" Grid.ColumnSpan="3" Spacing="4">
+      <TextBlock Text="Settings"
+                 FontFamily="Consolas"
+                 FontSize="18"
+                 FontWeight="SemiBold"
+                 Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+      <Border Width="32" Height="2" HorizontalAlignment="Left" Background="#687FB7" CornerRadius="1"/>
+    </StackPanel>
+
+    <Border Grid.Row="2" Grid.Column="0" Classes="settingsCard">
+      <Grid RowDefinitions="Auto,16,24,10,24,10,24,10,24,10,24,10,24,10,24,10,32"
+            ColumnDefinitions="132,210"
+            ColumnSpacing="4">
+        <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="Audio Output" Classes="settingsSectionTitle"/>
+
+        <TextBlock Grid.Row="2" Grid.Column="0" Text="Device" Classes="settingsLabel"/>
+        <ComboBox Grid.Row="2" Grid.Column="1" Classes="voiceDetailCombo settingsCombo"
+                  ItemsSource="{Binding AudioOutputOptions}"
+                  SelectedItem="{Binding SelectedAudioOutput, Mode=TwoWay}"/>
+
+        <TextBlock Grid.Row="4" Grid.Column="0" Text="Output Mode" Classes="settingsLabel"/>
+        <ComboBox Grid.Row="4" Grid.Column="1" Classes="voiceDetailCombo settingsCombo"
+                  ItemsSource="{Binding OutputChannelModeOptions}"
+                  SelectedItem="{Binding SelectedOutputChannelMode, Mode=TwoWay}"/>
+
+        <TextBlock Grid.Row="6" Grid.Column="0" Text="Buffer Size" Classes="settingsLabel"/>
+        <ComboBox Grid.Row="6" Grid.Column="1" Classes="voiceDetailCombo settingsCombo"
+                  ItemsSource="{Binding AudioBufferSizeOptions}"
+                  SelectedItem="{Binding SelectedAudioBufferSize, Mode=TwoWay}"/>
+
+        <TextBlock Grid.Row="8" Grid.Column="0" Text="Output Hz" Classes="settingsLabel"/>
+        <ComboBox Grid.Row="8" Grid.Column="1" Classes="voiceDetailCombo settingsCombo"
+                  ItemsSource="{Binding PlaybackSampleRateOptions}"
+                  SelectedItem="{Binding SelectedPlaybackSampleRate, Mode=TwoWay}"/>
+
+        <TextBlock Grid.Row="10" Grid.Column="0" Text="DirectSound Ch." Classes="settingsLabel"/>
+        <ComboBox Grid.Row="10" Grid.Column="1" Classes="voiceDetailCombo settingsCombo"
+                  ItemsSource="{Binding DirectSoundChannelCountOptions}"
+                  SelectedItem="{Binding SelectedDirectSoundChannelCount, Mode=TwoWay}"/>
+
+        <TextBlock Grid.Row="12" Grid.Column="0" Text="Reverb" Classes="settingsLabel"/>
+        <CheckBox Grid.Row="12" Grid.Column="1" Classes="settingsCheck"
+                  Content="Enabled"
+                  IsChecked="{Binding ReverbEnabled, Mode=TwoWay}"/>
+
+        <TextBlock Grid.Row="14" Grid.Column="0" Text="MP2K PCM" Classes="settingsLabel"/>
+        <CheckBox Grid.Row="14" Grid.Column="1" Classes="settingsCheck"
+                  Content="Hardware Accurate"
+                  ToolTip.Tip="Uses the GBA fixed-rate signed 8-bit DMA path. Reverb requires this path."
+                  IsChecked="{Binding Mp2kPcmProcessingEnabled, Mode=TwoWay}"/>
+
+        <TextBlock Grid.Row="16" Grid.Column="0" Text="Emulation Volume" Classes="settingsLabel"/>
+        <Grid Grid.Row="16" Grid.Column="1" ColumnDefinitions="*,8,54">
+          <Slider Grid.Column="0" Classes="settingsSlider"
+                  Minimum="0" Maximum="255" TickFrequency="1" IsSnapToTickEnabled="True"
+                  Value="{Binding EmulationVolume, Mode=TwoWay}"/>
+          <Border Grid.Column="2" Classes="settingsValue">
+            <TextBlock Text="{Binding EmulationVolumeDisplay}" Classes="settingsValueText"/>
+          </Border>
+        </Grid>
+      </Grid>
+    </Border>
+
+    <Border Grid.Row="2" Grid.Column="2" Classes="settingsCard">
+      <Grid RowDefinitions="Auto,16,24,10,24,10,24,10,24,10,24"
+            ColumnDefinitions="132,210"
+            ColumnSpacing="4">
+        <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="Application" Classes="settingsSectionTitle"/>
+
+        <TextBlock Grid.Row="2" Grid.Column="0" Text="Render FPS" Classes="settingsLabel"/>
+        <ComboBox Grid.Row="2" Grid.Column="1" Classes="voiceDetailCombo settingsCombo"
+                  ItemsSource="{Binding RenderFrameRateOptions}"
+                  SelectedItem="{Binding SelectedRenderFrameRate, Mode=TwoWay}"/>
+
+        <TextBlock Grid.Row="4" Grid.Column="0" Text="Theme" Classes="settingsLabel"/>
+        <ComboBox Grid.Row="4" Grid.Column="1" Classes="voiceDetailCombo settingsCombo"
+                  ItemsSource="{Binding ThemeColorOptions}"
+                  SelectedItem="{Binding SelectedThemeColor, Mode=TwoWay}"/>
+
+        <TextBlock Grid.Row="6" Grid.Column="0" Text="MIDI Input" Classes="settingsLabel"/>
+        <ComboBox Grid.Row="6" Grid.Column="1" Classes="voiceDetailCombo settingsCombo"
+                  ItemsSource="{Binding MidiInOptions}"
+                  SelectedItem="{Binding SelectedMidiIn, Mode=TwoWay}"/>
+
+        <TextBlock Grid.Row="8" Grid.Column="0" Text="Output Quantize" Classes="settingsLabel"/>
+        <CheckBox Grid.Row="8" Grid.Column="1" Classes="settingsCheck"
+                  Content="Enabled"
+                  IsChecked="{Binding OutputQuantizeEnabled, Mode=TwoWay}"/>
+
+        <TextBlock Grid.Row="10" Grid.Column="0" Text="MIDI CC Mapping" Classes="settingsLabel"/>
+        <Button Grid.Row="10" Grid.Column="1"
+                Width="210"
+                Classes="voiceDetailButton"
+                Content="Configure..."
+                Click="OnMidiCcMappingClicked"/>
+      </Grid>
+    </Border>
+
+    <Border Grid.Row="4" Grid.ColumnSpan="3" Classes="settingsCard">
+      <Grid RowDefinitions="Auto,16,32,12,32"
+            ColumnDefinitions="132,*,12,72"
+            ColumnSpacing="4">
+        <TextBlock Grid.Row="0" Grid.ColumnSpan="4" Text="Metering" Classes="settingsSectionTitle"/>
+
+        <TextBlock Grid.Row="2" Grid.Column="0" Text="Meter Decay" Classes="settingsLabel"/>
+        <Slider Grid.Row="2" Grid.Column="1" Classes="settingsSlider"
+                Minimum="0" Maximum="200" TickFrequency="1" IsSnapToTickEnabled="True"
+                Value="{Binding MeterDecayMilliseconds, Mode=TwoWay}"/>
+        <Border Grid.Row="2" Grid.Column="3" Classes="settingsValue">
+          <TextBlock Text="{Binding MeterDecayDisplay}" Classes="settingsValueText"/>
+        </Border>
+
+        <TextBlock Grid.Row="4" Grid.Column="0" Text="Peak Decay" Classes="settingsLabel"/>
+        <Slider Grid.Row="4" Grid.Column="1" Classes="settingsSlider"
+                Minimum="0" Maximum="2000" TickFrequency="10" IsSnapToTickEnabled="True"
+                Value="{Binding PeakDecayMilliseconds, Mode=TwoWay}"/>
+        <Border Grid.Row="4" Grid.Column="3" Classes="settingsValue">
+          <TextBlock Text="{Binding PeakDecayDisplay}" Classes="settingsValueText"/>
+        </Border>
+      </Grid>
+    </Border>
+  </Grid>
+</Border>
+</UserControl>

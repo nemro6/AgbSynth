@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using AgbSynth.App.GBA;
+using AgbSynth.App.Project;
 
 namespace AgbSynth.App;
 
@@ -19,11 +20,14 @@ public partial class SongTableAddressWindow : Window
     {
         InitializeComponent();
         _romLength = romLength;
+        ReadModeComboBox.SelectedIndex = 0;
         AddressTextBox.KeyDown += OnAddressKeyDown;
     }
 
     public int? SongTableOffset { get; private set; }
     public string? SongTableAddressText { get; private set; }
+    public Mp2kRomReadMode ReadMode { get; private set; } = Mp2kRomReadMode.ManualSongTableAddress;
+    public bool IncludeUnreferencedVoiceGroups { get; private set; }
 
     private void OnAddressKeyDown(object? sender, KeyEventArgs e)
     {
@@ -44,8 +48,28 @@ public partial class SongTableAddressWindow : Window
         Close(false);
     }
 
+    private void OnReadModeSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        bool manual = ReadModeComboBox.SelectedIndex != 1;
+        AddressInputGrid.IsEnabled = manual;
+        ErrorTextBlock.Text = string.Empty;
+    }
+
     private void TryAccept()
     {
+        ReadMode = ReadModeComboBox.SelectedIndex == 1
+            ? Mp2kRomReadMode.AutomaticDiscovery
+            : Mp2kRomReadMode.ManualSongTableAddress;
+        IncludeUnreferencedVoiceGroups = IncludeUnreferencedCheckBox.IsChecked == true;
+
+        if (ReadMode == Mp2kRomReadMode.AutomaticDiscovery)
+        {
+            SongTableOffset = null;
+            SongTableAddressText = string.Empty;
+            Close(true);
+            return;
+        }
+
         string text = AddressTextBox.Text?.Trim() ?? string.Empty;
         string hexText = text.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
             ? text

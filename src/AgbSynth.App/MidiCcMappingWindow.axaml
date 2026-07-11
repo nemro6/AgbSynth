@@ -1,0 +1,129 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:AgbSynth.App"
+        x:Class="AgbSynth.App.MidiCcMappingWindow"
+        x:DataType="local:MidiCcMappingWindow"
+        Width="760"
+        Height="570"
+        MinWidth="760"
+        MaxWidth="760"
+        MinHeight="570"
+        MaxHeight="570"
+        CanResize="False"
+        Title="MIDI CC Mapping"
+        Background="Transparent"
+        TransparencyLevelHint="Transparent"
+        SystemDecorations="None">
+  <Border Background="{DynamicResource AppWindowBackgroundBrush}" BorderBrush="{DynamicResource AppControlPressedBrush}" BorderThickness="1" CornerRadius="10" ClipToBounds="True">
+    <Border.Styles>
+      <Style Selector="TextBlock">
+        <Setter Property="FontFamily" Value="Consolas"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+      </Style>
+      <Style Selector="TextBox.ccInput">
+        <Setter Property="Width" Value="58"/>
+        <Setter Property="Height" Value="24"/>
+        <Setter Property="MinHeight" Value="24"/>
+        <Setter Property="Padding" Value="6,0"/>
+        <Setter Property="FontFamily" Value="Consolas"/>
+        <Setter Property="FontSize" Value="10"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource AppControlBackgroundBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppControlBackgroundBrush}"/>
+        <Setter Property="CornerRadius" Value="4"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+      </Style>
+      <Style Selector="Button.dialogButton">
+        <Setter Property="Height" Value="28"/>
+        <Setter Property="MinHeight" Value="28"/>
+        <Setter Property="Padding" Value="14,0"/>
+        <Setter Property="FontFamily" Value="Consolas"/>
+        <Setter Property="FontSize" Value="10"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource AppControlBackgroundBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+        <Setter Property="CornerRadius" Value="5"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+      </Style>
+      <Style Selector="Button.dialogButton:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AppControlPressedBrush}"/>
+      </Style>
+      <Style Selector="Button.closeButton">
+        <Setter Property="Width" Value="34"/>
+        <Setter Property="Height" Value="34"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppTextSecondaryBrush}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="FontFamily" Value="Consolas"/>
+        <Setter Property="FontSize" Value="15"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        <Setter Property="VerticalAlignment" Value="Stretch"/>
+      </Style>
+    </Border.Styles>
+
+    <Grid RowDefinitions="34,*">
+      <Border Grid.Row="0" Background="{DynamicResource AppChromeBackgroundBrush}" BorderBrush="{DynamicResource AppControlBackgroundBrush}" BorderThickness="0,0,0,1" PointerPressed="OnTitleBarPointerPressed">
+        <Grid ColumnDefinitions="*,34">
+          <TextBlock Text="MIDI CC Mapping" Margin="14,0,0,0" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+          <Button Grid.Column="1" Classes="closeButton" Content="X" Click="OnCancelClicked"/>
+        </Grid>
+      </Border>
+
+      <Grid Grid.Row="1" Margin="24,18" RowDefinitions="Auto,12,*,12,Auto">
+        <StackPanel Grid.Row="0" Spacing="4">
+          <TextBlock Text="MP2K MIDI controllers" FontSize="15" FontWeight="SemiBold"/>
+          <TextBlock Text="These assignments are shared by ROM export, MIDI playback, MIDI input, looping, and mixer display."
+                     FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}"/>
+        </StackPanel>
+
+        <Grid Grid.Row="2" ColumnDefinitions="*,12,*">
+          <Border Grid.Column="0" Background="{DynamicResource AppSurfaceBrush}" BorderBrush="{DynamicResource AppControlHoverBrush}" BorderThickness="1" CornerRadius="7" Padding="14,12">
+            <Grid RowDefinitions="Auto,10,*">
+              <TextBlock Text="Sequence controls" FontSize="12" FontWeight="SemiBold"/>
+              <ItemsControl Grid.Row="2" ItemsSource="{Binding StandardMappings}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="local:MidiCcMappingRow">
+                    <Grid Height="30" ColumnDefinitions="94,58,10,*">
+                      <TextBlock Text="{Binding Name}" FontSize="10" VerticalAlignment="Center"/>
+                      <TextBox Grid.Column="1" Classes="ccInput" Text="{Binding ControllerText, Mode=TwoWay}"/>
+                      <TextBlock Grid.Column="3" Text="{Binding Description}" FontSize="9" Foreground="{DynamicResource AppTextMutedBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </Grid>
+          </Border>
+
+          <Border Grid.Column="2" Background="{DynamicResource AppSurfaceBrush}" BorderBrush="{DynamicResource AppControlHoverBrush}" BorderThickness="1" CornerRadius="7" Padding="14,12">
+            <Grid RowDefinitions="Auto,10,*">
+              <TextBlock Text="Extended tone controls" FontSize="12" FontWeight="SemiBold"/>
+              <ItemsControl Grid.Row="2" ItemsSource="{Binding ExtendedMappings}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="local:MidiCcMappingRow">
+                    <Grid Height="30" ColumnDefinitions="78,58,10,*">
+                      <TextBlock Text="{Binding Name}" FontSize="10" VerticalAlignment="Center"/>
+                      <TextBox Grid.Column="1" Classes="ccInput" Text="{Binding ControllerText, Mode=TwoWay}"/>
+                      <TextBlock Grid.Column="3" Text="{Binding Description}" FontSize="9" Foreground="{DynamicResource AppTextMutedBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </Grid>
+          </Border>
+        </Grid>
+
+        <Grid Grid.Row="4" ColumnDefinitions="*,Auto,8,Auto,8,Auto">
+          <TextBlock x:Name="ErrorTextBlock" Foreground="#FF8A8A" FontSize="10" VerticalAlignment="Center" TextWrapping="Wrap"/>
+          <Button Grid.Column="1" Classes="dialogButton" Content="Defaults" Click="OnDefaultsClicked"/>
+          <Button Grid.Column="3" Classes="dialogButton" Content="Cancel" Click="OnCancelClicked"/>
+          <Button Grid.Column="5" Classes="dialogButton" Content="Save" Click="OnSaveClicked"/>
+        </Grid>
+      </Grid>
+    </Grid>
+  </Border>
+</Window>

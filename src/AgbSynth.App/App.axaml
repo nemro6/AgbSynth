@@ -2,8 +2,52 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="AgbSynth.App.App"
              RequestedThemeVariant="Default">
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="AppWindowBackgroundBrush">#0B0B0B</SolidColorBrush>
+          <SolidColorBrush x:Key="AppChromeBackgroundBrush">#111111</SolidColorBrush>
+          <SolidColorBrush x:Key="AppSurfaceBrush">#181818</SolidColorBrush>
+          <SolidColorBrush x:Key="AppSurfaceAltBrush">#202020</SolidColorBrush>
+          <SolidColorBrush x:Key="AppControlBackgroundBrush">#2A2524</SolidColorBrush>
+          <SolidColorBrush x:Key="AppControlHoverBrush">#2C2C2C</SolidColorBrush>
+          <SolidColorBrush x:Key="AppControlPressedBrush">#343434</SolidColorBrush>
+          <SolidColorBrush x:Key="AppSelectionBrush">#515151</SolidColorBrush>
+          <SolidColorBrush x:Key="AppTableRowBrush">#262626</SolidColorBrush>
+          <SolidColorBrush x:Key="AppTableHoverBrush">#303030</SolidColorBrush>
+          <SolidColorBrush x:Key="AppTableSelectedBrush">#3A3A3A</SolidColorBrush>
+          <SolidColorBrush x:Key="AppBorderBrush">#3A3A3A</SolidColorBrush>
+          <SolidColorBrush x:Key="AppBorderStrongBrush">#515151</SolidColorBrush>
+          <SolidColorBrush x:Key="AppTextPrimaryBrush">#F0F0F0</SolidColorBrush>
+          <SolidColorBrush x:Key="AppTextSecondaryBrush">#CFCFCF</SolidColorBrush>
+          <SolidColorBrush x:Key="AppTextMutedBrush">#9A9A9A</SolidColorBrush>
+          <SolidColorBrush x:Key="AppDisabledBrush">#777777</SolidColorBrush>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="AppWindowBackgroundBrush">#F5F5F5</SolidColorBrush>
+          <SolidColorBrush x:Key="AppChromeBackgroundBrush">#FFFFFF</SolidColorBrush>
+          <SolidColorBrush x:Key="AppSurfaceBrush">#FAFAFA</SolidColorBrush>
+          <SolidColorBrush x:Key="AppSurfaceAltBrush">#F0F0F0</SolidColorBrush>
+          <SolidColorBrush x:Key="AppControlBackgroundBrush">#E8E8E8</SolidColorBrush>
+          <SolidColorBrush x:Key="AppControlHoverBrush">#DEDEDE</SolidColorBrush>
+          <SolidColorBrush x:Key="AppControlPressedBrush">#D2D2D2</SolidColorBrush>
+          <SolidColorBrush x:Key="AppSelectionBrush">#CCD6E8</SolidColorBrush>
+          <SolidColorBrush x:Key="AppTableRowBrush">#FFFFFF</SolidColorBrush>
+          <SolidColorBrush x:Key="AppTableHoverBrush">#ECECEC</SolidColorBrush>
+          <SolidColorBrush x:Key="AppTableSelectedBrush">#D7E2F7</SolidColorBrush>
+          <SolidColorBrush x:Key="AppBorderBrush">#C8C8C8</SolidColorBrush>
+          <SolidColorBrush x:Key="AppBorderStrongBrush">#A8A8A8</SolidColorBrush>
+          <SolidColorBrush x:Key="AppTextPrimaryBrush">#151515</SolidColorBrush>
+          <SolidColorBrush x:Key="AppTextSecondaryBrush">#444444</SolidColorBrush>
+          <SolidColorBrush x:Key="AppTextMutedBrush">#6A6A6A</SolidColorBrush>
+          <SolidColorBrush x:Key="AppDisabledBrush">#949494</SolidColorBrush>
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
   <Application.Styles>
     <FluentTheme />
+    <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
   </Application.Styles>
 </Application>
-
