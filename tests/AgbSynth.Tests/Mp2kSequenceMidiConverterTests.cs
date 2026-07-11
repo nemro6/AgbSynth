@@ -27,6 +27,7 @@ public sealed class Mp2kSequenceMidiConverterTests
         byte[] bytes = AgbSynth.App.MIDI.MidiFileWriter.Build(midi, Mp2kSequenceMidiConverter.TicksPerQuarter);
 
         Assert.Equal(1, midi[0].Events.Count(e => e.Data.Length >= 2 && e.Data[0] == 0xFF && e.Data[1] == 0x51));
+        Assert.Equal(1, midi[1].Events.Count(e => e.Data.Length >= 2 && e.Data[0] == 0xFF && e.Data[1] == 0x51));
         Assert.Equal((byte)'M', bytes[0]);
         Assert.Equal((byte)'T', bytes[1]);
         Assert.Equal((byte)'h', bytes[2]);

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using NAudio.Wave;
+using AgbSynth.App.MP2K;
 using AgbSynth.App.Project;
 
 namespace AgbSynth.App.Audio;
@@ -21,8 +22,8 @@ public sealed class AgbAudioEngine : ISampleProvider, IDisposable
     public const int DefaultDirectSoundMixerChannelCount = 12;
     public const int DefaultMp2kFixedSampleRate = 13379;
     public const int GbaOutputSampleRate = 32768;
-    private const int GbaCpuFrequency = 16_777_216;
-    private const int GbaCyclesPerFrame = 280_896;
+    public const int GbaCpuFrequency = 16_777_216;
+    public const int GbaCyclesPerFrame = 280_896;
     private const int PsgFrameSequencerCycles = 32_768;
     private const int GbaPsgTimingFactor = 4;
     private const double EnvelopeUpdateRate = 59.7275;
@@ -61,6 +62,7 @@ public sealed class AgbAudioEngine : ISampleProvider, IDisposable
     private readonly int[] _squarePhases = new int[PsgSquareHardwareChannelCount];
     private readonly ulong[] _squareCycleAccumulatorsQ32 = new ulong[PsgSquareHardwareChannelCount];
     private readonly TrackLfoState[] _trackLfos = CreateTrackLfoStates();
+    private Mp2kMidiPlaybackSession? _midiPlaybackSession;
     private WaveOutEvent? _output;
     private int _nextVoiceId;
     private int _desiredLatencyMs;
@@ -366,6 +368,78 @@ public sealed class AgbAudioEngine : ISampleProvider, IDisposable
         }
     }
 
+    public void StartMp2kMidiPlaybackSession(Mp2kMidiPlaybackSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        lock (_lock)
+        {
+            if (!ReferenceEquals(_midiPlaybackSession, session))
+                _midiPlaybackSession?.Stop();
+            _midiPlaybackSession = session;
+            _mplayTempoCounter = 0;
+        }
+
+        TryStartOutput();
+    }
+
+    public void StopMp2kMidiPlaybackSession(Mp2kMidiPlaybackSession? session = null)
+    {
+        lock (_lock)
+        {
+            if (_midiPlaybackSession is null ||
+                (session is not null && !ReferenceEquals(_midiPlaybackSession, session)))
+            {
+                return;
+            }
+
+            Mp2kMidiPlaybackSession activeSession = _midiPlaybackSession;
+            _midiPlaybackSession = null;
+            activeSession.Stop();
+        }
+    }
+
+    public bool IsVoiceActive(int voiceId)
+    {
+        lock (_lock)
+            return _voices.Exists(voice => voice.Id == voiceId && !voice.Done);
+    }
+
+    public void StopVoicesForOwnerRank(int ownerRank)
+    {
+        ownerRank = Math.Clamp(ownerRank, 0, 127);
+        lock (_lock)
+        {
+            foreach (ActiveVoice voice in _voices)
+            {
+                if (voice.OwnerRank == ownerRank)
+                    voice.Release();
+            }
+        }
+    }
+
+    public bool TryGetTrackMetrics(int ownerRank, out float level, out float lfoWave)
+    {
+        ownerRank = Math.Clamp(ownerRank, 0, 127);
+        level = 0;
+        lfoWave = 0;
+        bool found = false;
+        lock (_lock)
+        {
+            foreach (ActiveVoice voice in _voices)
+            {
+                if (voice.OwnerRank != ownerRank || voice.Done)
+                    continue;
+
+                found = true;
+                level = Math.Max(level, voice.MeterLevel);
+                if (Math.Abs(voice.CurrentLfoWave) >= Math.Abs(lfoWave))
+                    lfoWave = voice.CurrentLfoWave;
+            }
+        }
+
+        return found;
+    }
+
     public int ReverbLevel
     {
         get
@@ -395,6 +469,32 @@ public sealed class AgbAudioEngine : ISampleProvider, IDisposable
         float[] samples = new float[signedPcm.Length];
         for (int i = 0; i < signedPcm.Length; i++)
             samples[i] = unchecked((sbyte)signedPcm[i]) / 128f;
+
+        return NoteOnPrepared(
+            samples,
+            header,
+            baseKey,
+            midiNote,
+            velocity,
+            volume,
+            pan,
+            priority,
+            attack,
+            decay,
+            sustain,
+            release,
+            pitchOffsetSemitones,
+            lfoSettings,
+            fixedPitch,
+            fixedSampleRate,
+            ownerRank,
+            rhythmPan);
+    }
+
+    public int NoteOnPrepared(float[] samples, SampleHeaderProjectInfo header, int baseKey, int midiNote, int velocity, int volume, int pan, int priority, int attack = 255, int decay = 255, int sustain = 255, int release = 255, double pitchOffsetSemitones = 0, AgbLfoSettings lfoSettings = default, bool fixedPitch = false, int fixedSampleRate = DefaultMp2kFixedSampleRate, int ownerRank = 0, int rhythmPan = 0)
+    {
+        if (samples.Length == 0)
+            return -1;
 
         bool useMp2kMixerClock;
         lock (_lock)
@@ -1194,7 +1294,15 @@ public sealed class AgbAudioEngine : ISampleProvider, IDisposable
     {
         int synthesisSampleRate = GetSynthesisSampleRateNoLock();
         int vblankTicks = AdvanceVBlankClockNoLock(synthesisSampleRate);
-        AdvanceTrackLfoClockNoLock(synthesisSampleRate, vblankTicks);
+        if (_midiPlaybackSession is { } session)
+        {
+            for (int i = 0; i < vblankTicks; i++)
+                session.AdvanceVBlank(TickTrackLfosNoLock);
+        }
+        else
+        {
+            AdvanceTrackLfoClockNoLock(synthesisSampleRate, vblankTicks);
+        }
         int psgEnvelopeSteps = AdvancePsgEnvelopeClockNoLock(vblankTicks);
         AdvancePsgHardwareFrameNoLock(synthesisSampleRate);
 
@@ -1384,7 +1492,11 @@ public sealed class AgbAudioEngine : ISampleProvider, IDisposable
     public void Dispose()
     {
         lock (_lock)
+        {
+            _midiPlaybackSession?.Stop();
+            _midiPlaybackSession = null;
             _voices.Clear();
+        }
         try
         {
             _output?.Stop();

@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using AgbSynth.App.Audio;
 using AgbSynth.App.MP2K;
 using AgbSynth.App.Project;
 using Avalonia.Media;
@@ -54,29 +55,18 @@ public sealed partial class MainWindowViewModel
 
     private void TickMixer()
     {
+        ApplySequencePlaybackSnapshot();
         foreach (var strip in MixerStrips)
         {
             double actualLevel = 0;
             double lfoWave = 0;
             bool hasLfoWave = false;
-            if (_audioEngine is not null)
+            if (_audioEngine is not null &&
+                _audioEngine.TryGetTrackMetrics(strip.Channel, out float trackLevel, out float trackLfoWave))
             {
-                foreach (var pair in _activePreviewVoices)
-                {
-                    if (pair.Key.Channel != strip.Channel)
-                        continue;
-                    foreach (var activeVoice in pair.Value)
-                    {
-                        if (_audioEngine.TryGetVoiceLevel(activeVoice.VoiceId, out float voiceLevel))
-                            actualLevel = Math.Max(actualLevel, voiceLevel);
-                        if (_audioEngine.TryGetVoiceLfoWave(activeVoice.VoiceId, out float voiceLfoWave) &&
-                            Math.Abs(voiceLfoWave) >= Math.Abs(lfoWave))
-                        {
-                            lfoWave = voiceLfoWave;
-                            hasLfoWave = true;
-                        }
-                    }
-                }
+                actualLevel = trackLevel;
+                lfoWave = trackLfoWave;
+                hasLfoWave = Math.Abs(trackLfoWave) > float.Epsilon;
             }
 
             strip.Tick(
@@ -88,6 +78,49 @@ public sealed partial class MainWindowViewModel
         }
     }
 
+    private void ApplySequencePlaybackSnapshot()
+    {
+        if (_sequenceAudioRuntime is not { } runtime || _midiPlaybackSession is not { } session)
+            return;
+
+        PlaybackProgress = Math.Clamp(
+            session.LastEventSourceTick / (double)Math.Max(1, _sequencePlaybackLastTick) * 100.0,
+            0,
+            100);
+
+        Mp2kSequencePlaybackSnapshot snapshot = runtime.Snapshot;
+        if (snapshot.Revision == _lastSequenceSnapshotRevision)
+            return;
+        _lastSequenceSnapshotRevision = snapshot.Revision;
+
+        foreach (Mp2kSequenceChannelSnapshot channel in snapshot.Channels)
+        {
+            if ((uint)channel.Channel >= (uint)MixerStrips.Count)
+                continue;
+
+            AgbMixerStrip strip = MixerStrips[channel.Channel];
+            strip.ActiveNote = channel.ActiveNote;
+            strip.Velocity = channel.Velocity;
+            strip.ProgramId = channel.Program;
+            strip.InstrumentType = channel.InstrumentLabel;
+            strip.Volume = channel.Volume;
+            strip.Pan = channel.Pan - 64;
+            strip.BendRange = channel.BendRange;
+            strip.PitchBend = channel.PitchBend;
+            strip.Modulation = channel.Modulation;
+            strip.ModSpeed = channel.ModSpeed;
+            strip.ModType = channel.ModType;
+            strip.ModDelay = channel.ModDelay;
+            strip.Tune = channel.Tune;
+            strip.Priority = channel.Priority;
+            strip.IssueLog = channel.IssueLog;
+            if (channel.VoiceRejected)
+                strip.AlertActive = true;
+        }
+
+        OnPropertyChanged(nameof(ActiveNoteChannelMasks));
+    }
+
     private bool IsMixerChannelOutputEnabled(int channel)
     {
         return (uint)channel >= (uint)MixerStrips.Count || MixerStrips[channel].OutputEnabled;
@@ -95,9 +128,11 @@ public sealed partial class MainWindowViewModel
 
     private void OnMixerOutputEnabledChanged(int channel, bool enabled)
     {
+        _sequenceAudioRuntime?.SetChannelEnabled(channel, enabled);
         if (enabled)
             return;
 
+        _audioEngine?.StopVoicesForOwnerRank(channel);
         StopPreviewNotesForChannel(channel);
     }
 

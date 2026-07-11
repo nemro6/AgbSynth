@@ -18,7 +18,7 @@ public sealed partial class MainWindowViewModel
     private ThemeColorOption? _selectedThemeColor;
     private OutputChannelModeOption? _selectedOutputChannelMode;
     private bool _linearInterpolationEnabled = true;
-    private bool _reverbEnabled;
+    private bool _reverbEnabled = true;
     private int _outputSampleRate = AgbAudioEngine.GbaOutputSampleRate;
     private double _emulationVolume = 255;
     private double _meterDecayMilliseconds = 100;
@@ -241,7 +241,7 @@ public sealed partial class MainWindowViewModel
                 ? (int)Math.Round(Math.Clamp(legacyPercent, 0, 100) * 255.0 / 100.0)
                 : 255);
         EmulationVolume = Math.Clamp(emulationVolume, 0, 255);
-        ReverbEnabled = settings.ReverbEnabled ?? false;
+        ReverbEnabled = settings.ReverbEnabled ?? true;
         SelectedPlaybackSampleRate = PlaybackSampleRateOptions.FirstOrDefault(o => o.SampleRate == settings.OutputSampleRate)
             ?? PlaybackSampleRateOptions.FirstOrDefault(o => o.SampleRate == AgbAudioEngine.GbaOutputSampleRate)
             ?? PlaybackSampleRateOptions.FirstOrDefault();

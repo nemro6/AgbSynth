@@ -1,12 +1,11 @@
 using System;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using AgbSynth.App.Audio;
 using AgbSynth.App.MIDI;
+using AgbSynth.App.MP2K;
 
 namespace AgbSynth.App.ViewModels;
 
@@ -14,6 +13,10 @@ public sealed partial class MainWindowViewModel
 {
     private CancellationTokenSource? _sequencePlaybackCts;
     private Task? _sequencePlaybackTask;
+    private Mp2kMidiPlaybackSession? _midiPlaybackSession;
+    private Mp2kSequenceAudioRuntime? _sequenceAudioRuntime;
+    private long _lastSequenceSnapshotRevision;
+    private int _sequencePlaybackLastTick = 1;
     private bool _isSequencePlaying;
     private bool _isSequencePaused;
     private double _playbackProgress;
@@ -148,9 +151,16 @@ public sealed partial class MainWindowViewModel
             return;
         }
 
+        if (SelectedVoiceGroup is null)
+        {
+            SequenceStatus = "VoiceGroup is not available for this sequence.";
+            return;
+        }
+
+        Mp2kPreparedVoiceBank voiceBank = BuildSequenceVoiceBank(midi);
+        _sequencePlaybackLastTick = Math.Max(1, midi.Events[^1].Tick);
         _currentPlayerPriority = Math.Clamp(sequence.Priority, 0, 255);
         ApplySequenceReverb(sequence);
-        ApplyLfoTempo(500_000);
 
         var cts = new CancellationTokenSource();
         _sequencePlaybackCts = cts;
@@ -158,7 +168,7 @@ public sealed partial class MainWindowViewModel
         IsSequencePlaying = true;
         SequenceStatus = $"Playing Song {sequence.SongId:D3}: {Path.GetFileName(midiPath)}";
 
-        _sequencePlaybackTask = RunSequencePlaybackAsync(sequence, midi, cts.Token);
+        _sequencePlaybackTask = RunSequencePlaybackAsync(sequence, midi, voiceBank, cts.Token);
         try
         {
             await _sequencePlaybackTask;
@@ -176,6 +186,12 @@ public sealed partial class MainWindowViewModel
             }
 
             StopPreviewNotesForSource(PreviewInputSource.Sequence);
+            if (_midiPlaybackSession is { } activeSession)
+                _audioEngine?.StopMp2kMidiPlaybackSession(activeSession);
+            _midiPlaybackSession = null;
+            _sequenceAudioRuntime = null;
+            _lastSequenceSnapshotRevision = 0;
+            _sequencePlaybackLastTick = 1;
             _currentPlayerPriority = 0;
             if (_audioEngine is not null)
             {
@@ -373,6 +389,8 @@ public sealed partial class MainWindowViewModel
             return;
 
         IsSequencePaused = !IsSequencePaused;
+        if (_midiPlaybackSession is not null)
+            _midiPlaybackSession.IsPaused = IsSequencePaused;
         SequenceStatus = IsSequencePaused
             ? $"Paused Song {SelectedSequence?.SongId:D3}"
             : $"Playing Song {SelectedSequence?.SongId:D3}";
@@ -388,6 +406,8 @@ public sealed partial class MainWindowViewModel
         }
 
         cts.Cancel();
+        if (_midiPlaybackSession is { } session)
+            _audioEngine?.StopMp2kMidiPlaybackSession(session);
         StopPreviewNotesForSource(PreviewInputSource.Sequence);
         if (_sequencePlaybackTask is not null)
         {
@@ -401,168 +421,43 @@ public sealed partial class MainWindowViewModel
         }
     }
 
-    private async Task RunSequencePlaybackAsync(SequenceHeaderRow sequence, MidiPlaybackFile midi, CancellationToken cancellationToken)
+    private async Task RunSequencePlaybackAsync(
+        SequenceHeaderRow sequence,
+        MidiPlaybackFile midi,
+        Mp2kPreparedVoiceBank voiceBank,
+        CancellationToken cancellationToken)
     {
-        IReadOnlyList<MidiPlaybackEvent> events = midi.Events;
-        if (events.Count == 0)
+        if (midi.Events.Count == 0)
             return;
 
-        int lastTick = Math.Max(1, events[^1].Tick);
-        int microsecondsPerQuarter = 500_000;
-        long currentTick = 0;
-        var stopwatch = Stopwatch.StartNew();
-        double targetMilliseconds = 0;
-        int queueOrder = 0;
-        var loops = new Dictionary<int, TrackLoopDefinition>();
-        var queue = new PriorityQueue<ScheduledMidiOccurrence, (long Tick, int Order)>();
+        var runtime = new Mp2kSequenceAudioRuntime(
+            AudioEngine,
+            voiceBank,
+            _midiCcMapping,
+            sequence.Priority,
+            _fixedDirectSoundSampleRate);
+        foreach (AgbMixerStrip strip in MixerStrips)
+            runtime.SetChannelEnabled(strip.Channel, strip.OutputEnabled);
+        var session = new Mp2kMidiPlaybackSession(
+            midi,
+            _midiCcMapping.LoopStart,
+            _midiCcMapping.LoopEnd,
+            runtime.ProcessEvent,
+            runtime.Tick,
+            runtime.StopAll);
+        _sequenceAudioRuntime = runtime;
+        _midiPlaybackSession = session;
+        AudioEngine.StartMp2kMidiPlaybackSession(session);
 
-        foreach (IGrouping<int, MidiPlaybackEvent> trackGroup in events.GroupBy(e => e.TrackIndex))
+        using CancellationTokenRegistration registration = cancellationToken.Register(() =>
+            AudioEngine.StopMp2kMidiPlaybackSession(session));
+        try
         {
-            MidiPlaybackEvent[] trackEvents = trackGroup.OrderBy(e => e.Tick).ThenBy(e => e.Order).ToArray();
-            int loopStart = trackEvents
-                .Where(IsLoopStartEvent)
-                .Select(e => e.Tick)
-                .DefaultIfEmpty(-1)
-                .Min();
-            int loopEnd = loopStart >= 0
-                ? trackEvents.Where(IsLoopEndEvent).Where(e => e.Tick > loopStart).Select(e => e.Tick).DefaultIfEmpty(-1).Max()
-                : -1;
-
-            if (loopStart >= 0 && loopEnd > loopStart)
-            {
-                var definition = new TrackLoopDefinition(
-                    trackGroup.Key,
-                    loopStart,
-                    loopEnd,
-                    trackEvents.Where(e => !IsLoopMarker(e) && e.Tick >= loopStart && e.Tick < loopEnd).ToArray(),
-                    trackEvents.Where(e => e.Kind == MidiPlaybackEventKind.NoteOff && e.Tick >= loopEnd).ToArray());
-                loops[trackGroup.Key] = definition;
-
-                foreach (MidiPlaybackEvent ev in trackEvents.Where(e => !IsLoopMarker(e) && e.Tick < loopEnd))
-                    EnqueueMidiOccurrence(queue, new ScheduledMidiOccurrence(ev.Tick, ev, null, 0), ref queueOrder);
-                foreach (MidiPlaybackEvent ev in definition.TailNoteOffs)
-                    EnqueueMidiOccurrence(queue, new ScheduledMidiOccurrence(ev.Tick, ev, null, 0), ref queueOrder);
-                EnqueueMidiOccurrence(
-                    queue,
-                    new ScheduledMidiOccurrence(loopEnd, null, definition.TrackIndex, 0),
-                    ref queueOrder);
-            }
-            else
-            {
-                foreach (MidiPlaybackEvent ev in trackEvents.Where(e => !IsLoopMarker(e)))
-                    EnqueueMidiOccurrence(queue, new ScheduledMidiOccurrence(ev.Tick, ev, null, 0), ref queueOrder);
-            }
+            await session.Completion.WaitAsync(cancellationToken);
         }
-
-        while (queue.TryDequeue(out ScheduledMidiOccurrence? occurrence, out _))
+        finally
         {
-            if (occurrence is null)
-                continue;
-            cancellationToken.ThrowIfCancellationRequested();
-            while (IsSequencePaused)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                await Task.Delay(20, cancellationToken);
-                stopwatch.Restart();
-            }
-
-            long deltaTicks = Math.Max(0, occurrence.AbsoluteTick - currentTick);
-            targetMilliseconds += TicksToMilliseconds(deltaTicks, microsecondsPerQuarter, midi.TicksPerQuarter);
-            await WaitUntilAsync(stopwatch, targetMilliseconds, cancellationToken);
-            currentTick = occurrence.AbsoluteTick;
-
-            if (occurrence.LoopTrackIndex is int loopTrackIndex &&
-                loops.TryGetValue(loopTrackIndex, out TrackLoopDefinition? loop) &&
-                loop is not null)
-            {
-                int nextCycle = occurrence.LoopCycle + 1;
-                long cycleOffset = (long)nextCycle * loop.Length;
-                foreach (MidiPlaybackEvent ev in loop.BodyEvents)
-                {
-                    EnqueueMidiOccurrence(
-                        queue,
-                        new ScheduledMidiOccurrence(ev.Tick + cycleOffset, ev, null, nextCycle),
-                        ref queueOrder);
-                }
-                foreach (MidiPlaybackEvent ev in loop.TailNoteOffs)
-                {
-                    EnqueueMidiOccurrence(
-                        queue,
-                        new ScheduledMidiOccurrence(ev.Tick + cycleOffset, ev, null, nextCycle),
-                        ref queueOrder);
-                }
-                EnqueueMidiOccurrence(
-                    queue,
-                    new ScheduledMidiOccurrence(loop.EndTick + cycleOffset, null, loop.TrackIndex, nextCycle),
-                    ref queueOrder);
-                SequenceStatus = $"Looping Song {sequence.SongId:D3}: track {loop.TrackIndex}, tick {loop.StartTick}-{loop.EndTick}";
-                continue;
-            }
-
-            if (occurrence.Event is not { } midiEvent)
-                continue;
-
-            PlaybackProgress = midiEvent.Tick / (double)lastTick * 100.0;
-            ProcessSequenceMidiEvent(midiEvent, ref microsecondsPerQuarter);
-        }
-    }
-
-    private bool IsLoopStartEvent(MidiPlaybackEvent ev) =>
-        ev.Kind == MidiPlaybackEventKind.ControlChange && ev.Data1 == _midiCcMapping.LoopStart;
-
-    private bool IsLoopEndEvent(MidiPlaybackEvent ev) =>
-        ev.Kind == MidiPlaybackEventKind.ControlChange && ev.Data1 == _midiCcMapping.LoopEnd;
-
-    private bool IsLoopMarker(MidiPlaybackEvent ev) => IsLoopStartEvent(ev) || IsLoopEndEvent(ev);
-
-    private static void EnqueueMidiOccurrence(
-        PriorityQueue<ScheduledMidiOccurrence, (long Tick, int Order)> queue,
-        ScheduledMidiOccurrence occurrence,
-        ref int order)
-    {
-        queue.Enqueue(occurrence, (occurrence.AbsoluteTick, order++));
-    }
-
-    private sealed record TrackLoopDefinition(
-        int TrackIndex,
-        int StartTick,
-        int EndTick,
-        IReadOnlyList<MidiPlaybackEvent> BodyEvents,
-        IReadOnlyList<MidiPlaybackEvent> TailNoteOffs)
-    {
-        public int Length => EndTick - StartTick;
-    }
-
-    private sealed record ScheduledMidiOccurrence(
-        long AbsoluteTick,
-        MidiPlaybackEvent? Event,
-        int? LoopTrackIndex,
-        int LoopCycle);
-
-    private void ProcessSequenceMidiEvent(MidiPlaybackEvent ev, ref int microsecondsPerQuarter)
-    {
-        int channel = Math.Clamp(ev.Channel, 0, 15);
-        switch (ev.Kind)
-        {
-            case MidiPlaybackEventKind.NoteOn:
-                PreviewNoteOnCore(ev.Data1, ev.Data2, channel, PreviewInputSource.Sequence, useMidiProgram: true, replacePsgSourceChannelNotes: true);
-                break;
-            case MidiPlaybackEventKind.NoteOff:
-                PreviewNoteOffCore(ev.Data1, channel, PreviewInputSource.Sequence);
-                break;
-            case MidiPlaybackEventKind.ControlChange:
-                ApplyMidiControlChange(channel, ev.Data1, ev.Data2);
-                break;
-            case MidiPlaybackEventKind.ProgramChange:
-                ApplyMidiProgramChange(channel, ev.Data1);
-                break;
-            case MidiPlaybackEventKind.PitchBend:
-                ApplyMidiPitchBend(channel, ev.Data1);
-                break;
-            case MidiPlaybackEventKind.Tempo:
-                microsecondsPerQuarter = Math.Clamp(ev.Data3, 1, 60_000_000);
-                ApplyLfoTempo(microsecondsPerQuarter);
-                break;
+            AudioEngine.StopMp2kMidiPlaybackSession(session);
         }
     }
 
@@ -572,14 +467,6 @@ public sealed partial class MainWindowViewModel
             ? sequence.Reverb & 0x7F
             : _soundModeReverbLevel;
         AudioEngine.ConfigureReverb(_reverbEnabled ? level : 0, _fixedDirectSoundSampleRate);
-    }
-
-    private void ApplyLfoTempo(int microsecondsPerQuarter)
-    {
-        microsecondsPerQuarter = Math.Clamp(microsecondsPerQuarter, 1, 60_000_000);
-        // Exported files store the raw MP2K TEMPO byte as MIDI BPM at PPQN 48.
-        int tempoByte = (int)Math.Round(60_000_000.0 / microsecondsPerQuarter, MidpointRounding.AwayFromZero);
-        AudioEngine.SetMp2kTempoByte(tempoByte);
     }
 
     private string? ResolveSequenceMidiPath(SequenceHeaderRow sequence)
@@ -625,221 +512,4 @@ public sealed partial class MainWindowViewModel
         }
     }
 
-    private ChannelPlaybackSnapshot BuildSnapshotAt(IReadOnlyList<MidiPlaybackEvent> events, int tick)
-    {
-        var snapshot = ChannelPlaybackSnapshot.Create(defaultVolume: 100);
-        foreach (var ev in events)
-        {
-            if (ev.Tick >= tick)
-                break;
-
-            int channel = Math.Clamp(ev.Channel, 0, 15);
-            switch (ev.Kind)
-            {
-                case MidiPlaybackEventKind.ControlChange:
-                    snapshot.ApplyControlChange(channel, ev.Data1, ev.Data2, _midiCcMapping);
-                    break;
-                case MidiPlaybackEventKind.ProgramChange:
-                    snapshot.Programs[channel] = Math.Clamp(ev.Data1, 0, 127);
-                    snapshot.HasProgram[channel] = true;
-                    break;
-                case MidiPlaybackEventKind.PitchBend:
-                    snapshot.PitchBends[channel] = Math.Clamp(ev.Data1, 0, 16383);
-                    break;
-            }
-        }
-
-        return snapshot;
-    }
-
-    private void ApplyChannelSnapshot(ChannelPlaybackSnapshot snapshot)
-    {
-        Array.Copy(snapshot.Volumes, _channelVolumes, 16);
-        Array.Copy(snapshot.Pans, _channelPans, 16);
-        Array.Copy(snapshot.BendRanges, _channelBendRanges, 16);
-        Array.Copy(snapshot.BendRangeHighBits, _channelBendRangeHighBits, 16);
-        Array.Copy(snapshot.PitchBends, _channelPitchBends, 16);
-        Array.Copy(snapshot.ModDepths, _channelModDepths, 16);
-        Array.Copy(snapshot.ModSpeeds, _channelModSpeeds, 16);
-        Array.Copy(snapshot.ModTypes, _channelModTypes, 16);
-        Array.Copy(snapshot.ModDelays, _channelModDelays, 16);
-        Array.Copy(snapshot.Tunes, _channelTunes, 16);
-        Array.Copy(snapshot.Priorities, _channelPriorities, 16);
-        Array.Copy(snapshot.Programs, _channelPrograms, 16);
-        Array.Copy(snapshot.HasProgram, _channelHasProgram, 16);
-        Array.Copy(snapshot.XcmdTypes, _channelXcmdTypes, 16);
-        Array.Copy(snapshot.XcmdAttacks, _channelXcmdAttacks, 16);
-        Array.Copy(snapshot.XcmdDecays, _channelXcmdDecays, 16);
-        Array.Copy(snapshot.XcmdSustains, _channelXcmdSustains, 16);
-        Array.Copy(snapshot.XcmdReleases, _channelXcmdReleases, 16);
-        Array.Copy(snapshot.XcmdEchoVolumes, _channelXcmdEchoVolumes, 16);
-        Array.Copy(snapshot.XcmdEchoLengths, _channelXcmdEchoLengths, 16);
-        Array.Copy(snapshot.XcmdLengths, _channelXcmdLengths, 16);
-        Array.Copy(snapshot.XcmdSweeps, _channelXcmdSweeps, 16);
-
-        for (int channel = 0; channel < MixerStrips.Count && channel < 16; channel++)
-        {
-            var strip = MixerStrips[channel];
-            strip.Volume = _channelVolumes[channel];
-            strip.Pan = _channelPans[channel] - 64;
-            strip.BendRange = _channelBendRanges[channel];
-            strip.Modulation = _channelModDepths[channel];
-            strip.ModSpeed = _channelModSpeeds[channel];
-            strip.ModType = _channelModTypes[channel];
-            strip.ModDelay = _channelModDelays[channel];
-            strip.Tune = _channelTunes[channel];
-            strip.Priority = _channelPriorities[channel];
-            strip.ProgramId = _channelPrograms[channel];
-            strip.InstrumentType = _channelHasProgram[channel] ? ResolveProgramTypeName(_channelPrograms[channel]) : "-";
-            strip.PitchBend = 0;
-        }
-    }
-
-    private static int FindFirstEventIndexAtOrAfter(IReadOnlyList<MidiPlaybackEvent> events, int tick)
-    {
-        for (int i = 0; i < events.Count; i++)
-        {
-            if (events[i].Tick >= tick)
-                return i;
-        }
-
-        return events.Count;
-    }
-
-    private static int FindTempoAt(IReadOnlyList<MidiPlaybackEvent> events, int tick)
-    {
-        int microsecondsPerQuarter = 500_000;
-        foreach (var ev in events)
-        {
-            if (ev.Tick >= tick)
-                break;
-            if (ev.Kind == MidiPlaybackEventKind.Tempo)
-                microsecondsPerQuarter = Math.Clamp(ev.Data3, 1, 60_000_000);
-        }
-
-        return microsecondsPerQuarter;
-    }
-
-    private static double TicksToMilliseconds(long ticks, int microsecondsPerQuarter, int ticksPerQuarter)
-    {
-        return ticks * (microsecondsPerQuarter / 1000.0) / Math.Max(1, ticksPerQuarter);
-    }
-
-    private static async Task WaitUntilAsync(Stopwatch stopwatch, double targetMilliseconds, CancellationToken cancellationToken)
-    {
-        while (true)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            double remaining = targetMilliseconds - stopwatch.Elapsed.TotalMilliseconds;
-            if (remaining <= 0)
-                return;
-
-            // Leave the final millisecond to Stopwatch-based waiting. Task.Delay(1)
-            // commonly overshoots on Windows, making adjacent MIDI intervals alternate
-            // between late and short as the cumulative schedule catches up.
-            if (remaining > 2.0)
-            {
-                await Task.Delay(TimeSpan.FromMilliseconds(Math.Min(remaining - 1.0, 10.0)), cancellationToken);
-                continue;
-            }
-
-            Thread.SpinWait(64);
-        }
-    }
-
-    private sealed class ChannelPlaybackSnapshot
-    {
-        public int[] Volumes { get; } = new int[16];
-        public int[] Pans { get; } = new int[16];
-        public int[] BendRanges { get; } = new int[16];
-        public int[] BendRangeHighBits { get; } = new int[16];
-        public int[] PitchBends { get; } = new int[16];
-        public int[] ModDepths { get; } = new int[16];
-        public int[] ModSpeeds { get; } = new int[16];
-        public int[] ModTypes { get; } = new int[16];
-        public int[] ModDelays { get; } = new int[16];
-        public int[] Tunes { get; } = new int[16];
-        public int[] Priorities { get; } = new int[16];
-        public int[] Programs { get; } = new int[16];
-        public bool[] HasProgram { get; } = new bool[16];
-        public int[] XcmdTypes { get; } = new int[16];
-        public int[] XcmdAttacks { get; } = new int[16];
-        public int[] XcmdDecays { get; } = new int[16];
-        public int[] XcmdSustains { get; } = new int[16];
-        public int[] XcmdReleases { get; } = new int[16];
-        public int[] XcmdEchoVolumes { get; } = new int[16];
-        public int[] XcmdEchoLengths { get; } = new int[16];
-        public int[] XcmdLengths { get; } = new int[16];
-        public int[] XcmdSweeps { get; } = new int[16];
-
-        public static ChannelPlaybackSnapshot Create(int defaultVolume)
-        {
-            var snapshot = new ChannelPlaybackSnapshot();
-            Array.Fill(snapshot.Volumes, Math.Clamp(defaultVolume, 0, 127));
-            Array.Fill(snapshot.Pans, 64);
-            Array.Fill(snapshot.BendRanges, 2);
-            Array.Fill(snapshot.PitchBends, 8192);
-            Array.Fill(snapshot.ModSpeeds, 22);
-            Array.Fill(snapshot.Tunes, 64);
-            Array.Fill(snapshot.XcmdTypes, -1);
-            Array.Fill(snapshot.XcmdAttacks, -1);
-            Array.Fill(snapshot.XcmdDecays, -1);
-            Array.Fill(snapshot.XcmdSustains, -1);
-            Array.Fill(snapshot.XcmdReleases, -1);
-            Array.Fill(snapshot.XcmdLengths, -1);
-            Array.Fill(snapshot.XcmdSweeps, -1);
-            return snapshot;
-        }
-
-        public void ApplyControlChange(
-            int channel,
-            int controller,
-            int value,
-            AgbSynth.App.MP2K.MidiCcMapping midiCcMapping)
-        {
-            channel = Math.Clamp(channel, 0, 15);
-            value = Math.Clamp(value, 0, 127);
-            if (controller == midiCcMapping.Type)
-                XcmdTypes[channel] = value;
-            else if (controller == midiCcMapping.Attack)
-                XcmdAttacks[channel] = value;
-            else if (controller == midiCcMapping.Decay)
-                XcmdDecays[channel] = value;
-            else if (controller == midiCcMapping.Sustain)
-                XcmdSustains[channel] = value;
-            else if (controller == midiCcMapping.Release)
-                XcmdReleases[channel] = value;
-            else if (controller == midiCcMapping.EchoVolume)
-                XcmdEchoVolumes[channel] = value;
-            else if (controller == midiCcMapping.EchoLength)
-                XcmdEchoLengths[channel] = value;
-            else if (controller == midiCcMapping.Length)
-                XcmdLengths[channel] = value;
-            else if (controller == midiCcMapping.Sweep)
-                XcmdSweeps[channel] = value;
-            if (controller == midiCcMapping.Modulation)
-                ModDepths[channel] = value;
-            else if (controller == midiCcMapping.Volume)
-                Volumes[channel] = value;
-            else if (controller == midiCcMapping.Pan)
-                Pans[channel] = value;
-            else if (controller == midiCcMapping.BendRangeLow)
-                BendRanges[channel] = (Math.Clamp(BendRangeHighBits[channel], 0, 1) << 7) | value;
-            else if (controller == midiCcMapping.BendRangeHigh)
-            {
-                BendRangeHighBits[channel] = value & 0x01;
-                BendRanges[channel] = (BendRangeHighBits[channel] << 7) | (BendRanges[channel] & 0x7F);
-            }
-            else if (controller == midiCcMapping.LfoSpeed)
-                ModSpeeds[channel] = value;
-            else if (controller == midiCcMapping.ModulationType)
-                ModTypes[channel] = value;
-            else if (controller == midiCcMapping.LfoDelay)
-                ModDelays[channel] = value;
-            else if (controller == midiCcMapping.Tune)
-                Tunes[channel] = value;
-            else if (controller == midiCcMapping.Priority)
-                Priorities[channel] = value;
-        }
-    }
 }

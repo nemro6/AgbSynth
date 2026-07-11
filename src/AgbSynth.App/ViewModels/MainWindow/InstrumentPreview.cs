@@ -50,7 +50,20 @@ public sealed partial class MainWindowViewModel
     private int _masterVolume = 90;
     private bool _isMasterMuted;
 
-    public IReadOnlyList<ushort> ActiveNoteChannelMasks => _activeNoteChannelMasks.ToArray();
+    public IReadOnlyList<ushort> ActiveNoteChannelMasks
+    {
+        get
+        {
+            ushort[] masks = _activeNoteChannelMasks.ToArray();
+            if (_sequenceAudioRuntime is not { } runtime)
+                return masks;
+
+            IReadOnlyList<ushort> sequenceMasks = runtime.Snapshot.ActiveNoteChannelMasks;
+            for (int note = 0; note < masks.Length && note < sequenceMasks.Count; note++)
+                masks[note] |= sequenceMasks[note];
+            return masks;
+        }
+    }
     public IReadOnlyList<AudioBufferSizeOption> AudioBufferSizeOptions { get; } =
     [
         new AudioBufferSizeOption(48),

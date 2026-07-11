@@ -212,7 +212,12 @@ public static class Mp2kSequenceMidiConverter
 
                 case 0xBB: // TEMPO
                     if (ReadRequiredByte(bytes, ref position, firstParameter, out int tempo))
+                    {
+                        // Keep the conductor copy for DAWs and the source-track copy so
+                        // a per-track MP2K GOTO repeats TEMPO at the correct loop point.
                         conductor.AddTempo(tick, tempo);
+                        track.AddTempo(tick, tempo);
+                    }
                     break;
 
                 case 0xBC: // KEYSH
