@@ -410,32 +410,6 @@ public partial class MainWindow : Window
         _viewModel.IsMasterMuted = !_viewModel.IsMasterMuted;
     }
 
-    private void OnMixerMutePointerPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (sender is not Control { DataContext: AgbMixerStrip strip })
-            return;
-
-        var point = e.GetCurrentPoint(this);
-        if (point.Properties.IsRightButtonPressed)
-        {
-            _viewModel.ToggleMixerSolo(strip.Channel);
-            e.Handled = true;
-            return;
-        }
-
-        if (point.Properties.IsLeftButtonPressed)
-        {
-            strip.IsMuted = !strip.IsMuted;
-            e.Handled = true;
-        }
-    }
-
-    private void OnMixerAlertClicked(object? sender, RoutedEventArgs e)
-    {
-        if (sender is Control { DataContext: AgbMixerStrip strip })
-            _viewModel.DismissMixerAlert(strip);
-    }
-
     private void OnSongTableMoveSelectedUpClicked(object? sender, RoutedEventArgs e)
     {
         _viewModel.MoveSelectedSongTableEntryUp();
