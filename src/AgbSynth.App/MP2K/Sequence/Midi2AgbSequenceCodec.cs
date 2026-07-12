@@ -26,18 +26,24 @@ public static partial class Midi2AgbSequenceCodec
         report ??= new SequenceConversionReport();
         ParsedSource parsed = Tokenize(source);
         List<(string Label, int Position)> starts = FindTrackStarts(parsed);
+        HashSet<int> trackStarts = starts.Select(value => value.Position).ToHashSet();
         var events = new List<MidiPlaybackEvent>();
         int order = 0;
 
         for (int trackIndex = 0; trackIndex < starts.Count; trackIndex++)
-            ParseTrack(parsed, starts[trackIndex].Position, trackIndex, mapping, report, events, ref order);
+            ParseTrack(parsed, starts[trackIndex].Position, trackStarts, trackIndex, mapping, report, events, ref order);
 
         if (starts.Count == 0)
             throw new InvalidDataException("No Midi2agb track labels were found.");
 
-        return new MidiPlaybackFile(
-            TicksPerQuarter,
-            events.OrderBy(value => value.Tick).ThenBy(value => value.Order).ToList());
+        List<MidiPlaybackEvent> orderedEvents = events
+            .OrderBy(value => value.Tick)
+            .ThenBy(value => value.TrackIndex)
+            .ThenBy(value => PlaybackOrderPriority(value.Kind))
+            .ThenBy(value => value.Order)
+            .Select((value, index) => value with { Order = index })
+            .ToList();
+        return new MidiPlaybackFile(TicksPerQuarter, orderedEvents);
     }
 
     public static string Write(MidiPlaybackFile midi, string songName, MidiCcMapping? mapping = null, SequenceConversionReport? report = null)
@@ -223,6 +229,7 @@ public static partial class Midi2AgbSequenceCodec
     private static void ParseTrack(
         ParsedSource parsed,
         int start,
+        IReadOnlySet<int> trackStarts,
         int trackIndex,
         MidiCcMapping mapping,
         SequenceConversionReport report,
@@ -240,10 +247,22 @@ public static partial class Midi2AgbSequenceCodec
         int? loopStartTick = null;
         var calls = new Stack<(int Return, int Target, int Remaining)>();
         var activeTies = new HashSet<int>();
+        bool allowTrackBoundary = false;
         int budget = MaxCommandsPerTrack;
 
         while (position >= 0 && position < parsed.Statements.Count && budget-- > 0)
         {
+            bool atTrackBoundary = position != start && calls.Count == 0 && trackStarts.Contains(position);
+            if (atTrackBoundary)
+            {
+                if (!allowTrackBoundary)
+                    break;
+                allowTrackBoundary = false;
+            }
+            else if (allowTrackBoundary)
+            {
+                allowTrackBoundary = false;
+            }
             Statement statement = parsed.Statements[position++];
             if (statement.Kind != StatementKind.Bytes || statement.Values.Count == 0)
                 continue;
@@ -275,7 +294,8 @@ public static partial class Midi2AgbSequenceCodec
                     EndTies(output, activeTies, tick, trackIndex, channel, ref eventOrder);
                     return;
                 case "PEND":
-                    CompleteCall(calls, ref position);
+                    if (!CompleteCall(calls, ref position))
+                        allowTrackBoundary = true;
                     break;
                 case "PATT":
                     if (TryReadTarget(parsed, args, ref position, out int pattern))
@@ -545,6 +565,13 @@ public static partial class Midi2AgbSequenceCodec
         MidiPlaybackEventKind.Tempo => -10,
         MidiPlaybackEventKind.ProgramChange or MidiPlaybackEventKind.ControlChange or MidiPlaybackEventKind.PitchBend => -5,
         MidiPlaybackEventKind.NoteOff => 0,
+        MidiPlaybackEventKind.NoteOn => 1,
+        _ => 0
+    };
+
+    private static int PlaybackOrderPriority(MidiPlaybackEventKind kind) => kind switch
+    {
+        MidiPlaybackEventKind.Tempo => -10,
         MidiPlaybackEventKind.NoteOn => 1,
         _ => 0
     };

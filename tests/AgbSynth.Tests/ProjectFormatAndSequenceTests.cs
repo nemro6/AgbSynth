@@ -181,6 +181,70 @@ public sealed class ProjectFormatAndSequenceTests
         Assert.DoesNotContain(report.Issues, value => value.Code == "UNSUPPORTED_MP2K_COMMAND");
     }
 
+    [Fact]
+    public async Task RomDisassembler_MatchesMidiConverterForRunningXcmdRootPendAndInternalLoop()
+    {
+        byte[] bytes = new byte[0x240];
+        int position = 0x100;
+        bytes[position++] = 0xBC; bytes[position++] = 0; // KEYSH
+        bytes[position++] = 0xBD; bytes[position++] = 4; // VOICE
+        bytes[position++] = 0xCD; bytes[position++] = 8; bytes[position++] = 12; // XCMD xIECV
+        bytes[position++] = 8; bytes[position++] = 8; // Running XCMD xIECV
+        bytes[position++] = 0xC2; bytes[position++] = 44; // LFOS
+        bytes[position++] = 0xD5; bytes[position++] = 60; bytes[position++] = 100; // N06
+        bytes[position++] = 0x86; // W06
+        bytes[position++] = 0xB4; // Root PEND continues into the next contiguous track.
+        int secondTrackOffset = position;
+        int loopOffset = secondTrackOffset;
+        bytes[position++] = 0xBD; bytes[position++] = 5;
+        bytes[position++] = 0xD5; bytes[position++] = 64; bytes[position++] = 90;
+        bytes[position++] = 0x86;
+        bytes[position++] = 0xB2; WriteU32(bytes, position, GbaAddress.ToPointer(loopOffset));
+        await using var stream = new MemoryStream(bytes);
+        GbaRom rom = await GbaRom.LoadAsync(stream, "fixture.gba");
+        var header = new SongHeaderProjectInfo { TrackOffsets = [0x100, secondTrackOffset], TrackCount = 2 };
+
+        MidiPlaybackFile midi = MidiFileReader.Read(MidiFileWriter.Build(Mp2kSequenceMidiConverter.BuildMidi(rom, header), 48));
+        string source = Mp2kSequenceAssemblyExporter.Disassemble(rom, header, "fixture");
+        MidiPlaybackFile assembly = Midi2AgbSequenceCodec.Parse(source, MidiCcMapping.Default);
+
+        Assert.Contains(".byte XCMD, 8, 12", source);
+        Assert.Contains(".byte XCMD, 8, 8", source);
+        Assert.Contains(".byte LFOS, 44", source);
+        Assert.Equal(1, CountOccurrences(source, $"fixture_data_{loopOffset:X6}:"));
+        for (int track = 0; track < 2; track++)
+        {
+            string[] expected = midi.Events.Where(value => value.TrackIndex == track + 1).Select(NormalizeEvent).ToArray();
+            string[] actual = assembly.Events.Where(value => value.TrackIndex == track).Select(NormalizeEvent).ToArray();
+            Assert.Equal(expected, actual);
+        }
+    }
+
+    [Fact]
+    public void Midi2AgbParser_DoesNotSpillMalformedTrackIntoNextTrack()
+    {
+        const string source = """
+            song:
+                .byte 2, 0, 0, 0
+                .word 0
+                .word song_track_01
+                .word song_track_02
+            song_track_01:
+                .byte VOICE, 4
+                .byte XCMD, 8, 127
+            song_track_02:
+                .byte VOICE, 5
+                .byte N06, 64, 100
+                .byte W06
+                .byte FINE
+            """;
+
+        MidiPlaybackFile parsed = Midi2AgbSequenceCodec.Parse(source);
+
+        Assert.DoesNotContain(parsed.Events, value => value.TrackIndex == 0 && value.Kind == MidiPlaybackEventKind.NoteOn);
+        Assert.Contains(parsed.Events, value => value.TrackIndex == 1 && value.Kind == MidiPlaybackEventKind.NoteOn && value.Data1 == 64);
+    }
+
     private static string CreateTempDirectory()
     {
         string path = Path.Combine(Path.GetTempPath(), $"AgbSynthFormatTests_{Guid.NewGuid():N}");
@@ -189,4 +253,6 @@ public sealed class ProjectFormatAndSequenceTests
     }
 
     private static void WriteU32(byte[] bytes, int offset, uint value) => BitConverter.TryWriteBytes(bytes.AsSpan(offset, 4), value);
+    private static string NormalizeEvent(MidiPlaybackEvent value) => $"{value.Tick}:{value.Kind}:{value.Data1}:{value.Data2}:{value.Data3}";
+    private static int CountOccurrences(string text, string value) => text.Split(value, StringSplitOptions.None).Length - 1;
 }

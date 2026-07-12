@@ -271,7 +271,7 @@ public static class Mp2kSequenceMidiConverter
                     break;
 
                 case 0xCD: // XCMD
-                    if (!ParseExtendedCommand(bytes, ref position, ref tick, channel, track, midiCcMapping))
+                    if (!ParseExtendedCommand(bytes, ref position, firstParameter, ref tick, channel, track, midiCcMapping))
                     {
                         EndTies(track, tick, channel, activeTies);
                         return;
@@ -334,12 +334,13 @@ public static class Mp2kSequenceMidiConverter
     private static bool ParseExtendedCommand(
         ReadOnlySpan<byte> bytes,
         ref int position,
+        int? firstParameter,
         ref int tick,
         int channel,
         MidiTrack track,
         MidiCcMapping midiCcMapping)
     {
-        if (!TryReadByte(bytes, ref position, out int subcommand))
+        if (!ReadRequiredByte(bytes, ref position, firstParameter, out int subcommand))
             return false;
 
         int argumentLength = subcommand switch
