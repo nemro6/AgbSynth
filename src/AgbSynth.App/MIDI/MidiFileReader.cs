@@ -10,7 +10,11 @@ public static class MidiFileReader
 {
     public static MidiPlaybackFile Read(string path)
     {
-        byte[] bytes = File.ReadAllBytes(path);
+        return Read(File.ReadAllBytes(path));
+    }
+
+    public static MidiPlaybackFile Read(byte[] bytes)
+    {
         var reader = new Reader(bytes);
         if (reader.ReadAscii(4) != "MThd")
             throw new InvalidDataException("MIDI header chunk was not found.");

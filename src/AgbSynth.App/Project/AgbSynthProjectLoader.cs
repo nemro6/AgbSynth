@@ -20,8 +20,11 @@ public static class AgbSynthProjectLoader
         if (!File.Exists(projectPath))
             throw new FileNotFoundException("Project file was not found.", projectPath);
 
-        var project = JsonSerializer.Deserialize<AgbSynthProjectFile>(File.ReadAllText(projectPath), JsonOptions)
+        string projectJson = File.ReadAllText(projectPath);
+        var project = JsonSerializer.Deserialize<AgbSynthProjectFile>(projectJson, JsonOptions)
             ?? throw new InvalidDataException("Project file is empty or invalid.");
+
+        ValidateProjectEnvelope(project, projectPath);
 
         string projectDirectory = Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory();
         LoadSongTable(project, projectDirectory);
@@ -33,6 +36,9 @@ public static class AgbSynthProjectLoader
         LoadWaveMemory(project, projectDirectory);
         LinkVoiceGroupsToVoiceTables(project);
         LinkSongHeadersToVoiceGroups(project);
+        LinkSongTableToHeaders(project);
+        LinkVoiceDataAssets(project);
+        ProjectDiagnostics.Validate(project, projectDirectory);
         return project;
     }
 
@@ -43,13 +49,22 @@ public static class AgbSynthProjectLoader
         if (path is null)
             return;
 
-        var document = JsonSerializer.Deserialize<AgbSongTableDocument>(File.ReadAllText(path), JsonOptions);
+        SongTableDocument? document;
+        try
+        {
+            document = ReadDocument<SongTableDocument>(project, path, AgbSynthFormatContracts.SongTableFormat);
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidDataException or IOException)
+        {
+            AddAssetDiagnostic(project, path, ex);
+            return;
+        }
         if (document is null)
             return;
 
         project.SongTable = document.SongTable;
-        if (string.IsNullOrWhiteSpace(project.SongTable.FilePath))
-            project.SongTable.FilePath = ToProjectRelativePath(projectDirectory, path);
+        project.SongTable.AssetId = EnsureAssetId(document.AssetId, document.SongTable.AssetId, document.Format, path);
+        project.SongTable.FilePath = ToProjectRelativePath(projectDirectory, path);
         project.Songs = document.Entries ?? new List<SongTableEntryProjectInfo>();
     }
 
@@ -60,13 +75,14 @@ public static class AgbSynthProjectLoader
         {
             try
             {
-                var document = JsonSerializer.Deserialize<AgbSongHeaderDocument>(File.ReadAllText(path), JsonOptions);
+                var document = ReadDocument<SongHeaderDocument>(project, path, AgbSynthFormatContracts.SongHeaderFormat);
                 SongHeaderProjectInfo? header = document?.Header;
                 if (header is null)
                     continue;
 
-                if (string.IsNullOrWhiteSpace(header.FilePath))
-                    header.FilePath = ToProjectRelativePath(projectDirectory, path);
+                header.AssetId = EnsureAssetId(document!.AssetId, header.AssetId, document.Format, path);
+                // The file discovered on disk is authoritative; FilePath is only a rename hint.
+                header.FilePath = ToProjectRelativePath(projectDirectory, path);
                 if (string.IsNullOrWhiteSpace(header.MidiFilePath))
                 {
                     string inferredMidiPath = Path.Combine(
@@ -77,10 +93,13 @@ public static class AgbSynthProjectLoader
                         header.MidiFilePath = ToProjectRelativePath(projectDirectory, inferredMidiPath);
                 }
 
+                MigrateSequenceReference(header);
+
                 project.SongHeaders.Add(header);
             }
-            catch (JsonException)
+            catch (Exception ex) when (ex is JsonException or InvalidDataException or IOException)
             {
+                AddAssetDiagnostic(project, path, ex);
             }
         }
 
@@ -97,12 +116,13 @@ public static class AgbSynthProjectLoader
         {
             try
             {
-                var document = JsonSerializer.Deserialize<AgbVoiceGroupDocument>(File.ReadAllText(path), JsonOptions);
+                var document = ReadDocument<VoiceGroupDocument>(project, path, AgbSynthFormatContracts.VoiceGroupFormat);
                 if (document?.Voices is null)
                     continue;
 
                 project.VoiceGroups.Add(new VoiceGroupProjectInfo
                 {
+                    AssetId = EnsureAssetId(document.AssetId, string.Empty, document.Format, path),
                     Id = document.Id,
                     Label = string.IsNullOrWhiteSpace(document.Label)
                         ? Path.GetFileNameWithoutExtension(path)
@@ -115,8 +135,9 @@ public static class AgbSynthProjectLoader
                     Voices = document.Voices
                 });
             }
-            catch (JsonException)
+            catch (Exception ex) when (ex is JsonException or InvalidDataException or IOException)
             {
+                AddAssetDiagnostic(project, path, ex);
             }
         }
 
@@ -134,7 +155,7 @@ public static class AgbSynthProjectLoader
         {
             try
             {
-                var document = JsonSerializer.Deserialize<AgbKeySplitDocument>(File.ReadAllText(path), JsonOptions);
+                var document = ReadDocument<KeySplitDocument>(project, path, AgbSynthFormatContracts.KeySplitFormat);
                 if (document?.KeySplit is null)
                     continue;
 
@@ -143,6 +164,7 @@ public static class AgbSynthProjectLoader
                     document.KeySplit.Label = Path.GetFileNameWithoutExtension(path);
                 project.KeySplits.Add(new KeySplitAssetProjectInfo
                 {
+                    AssetId = EnsureAssetId(document.AssetId, string.Empty, document.Format, path),
                     Id = id++,
                     Label = document.KeySplit.Label,
                     FilePath = relativePath,
@@ -151,8 +173,9 @@ public static class AgbSynthProjectLoader
                     KeySplit = document.KeySplit
                 });
             }
-            catch (JsonException)
+            catch (Exception ex) when (ex is JsonException or InvalidDataException or IOException)
             {
+                AddAssetDiagnostic(project, path, ex);
             }
         }
     }
@@ -165,7 +188,7 @@ public static class AgbSynthProjectLoader
         {
             try
             {
-                var document = JsonSerializer.Deserialize<AgbDrumSetDocument>(File.ReadAllText(path), JsonOptions);
+                var document = ReadDocument<DrumSetDocument>(project, path, AgbSynthFormatContracts.DrumSetFormat);
                 if (document?.DrumSet is null)
                     continue;
 
@@ -175,6 +198,7 @@ public static class AgbSynthProjectLoader
                 EnsureDrumSetEntryCount(document.DrumSet);
                 project.DrumSets.Add(new DrumSetAssetProjectInfo
                 {
+                    AssetId = EnsureAssetId(document.AssetId, string.Empty, document.Format, path),
                     Id = id++,
                     Label = document.DrumSet.Label,
                     FilePath = relativePath,
@@ -183,8 +207,9 @@ public static class AgbSynthProjectLoader
                     DrumSet = document.DrumSet
                 });
             }
-            catch (JsonException)
+            catch (Exception ex) when (ex is JsonException or InvalidDataException or IOException)
             {
+                AddAssetDiagnostic(project, path, ex);
             }
         }
     }
@@ -197,12 +222,13 @@ public static class AgbSynthProjectLoader
         {
             try
             {
-                var document = JsonSerializer.Deserialize<AgbWaveDataDocument>(File.ReadAllText(path), JsonOptions);
+                var document = ReadDocument<WaveDataDocument>(project, path, AgbSynthFormatContracts.WaveDataFormat, allowLegacyMissingEnvelope: true);
                 if (document?.Header is null)
                     continue;
 
                 project.WaveData.Add(new WaveDataProjectInfo
                 {
+                    AssetId = EnsureAssetId(document.AssetId, string.Empty, document.Format, path),
                     Id = id++,
                     FilePath = ToProjectRelativePath(projectDirectory, path),
                     DataFormat = string.IsNullOrWhiteSpace(document.DataFormat) ? "Signed8MonoPcm" : document.DataFormat,
@@ -215,8 +241,9 @@ public static class AgbSynthProjectLoader
                     DataOffset = document.Header.DataOffset
                 });
             }
-            catch (JsonException)
+            catch (Exception ex) when (ex is JsonException or InvalidDataException or IOException)
             {
+                AddAssetDiagnostic(project, path, ex);
             }
         }
     }
@@ -227,11 +254,26 @@ public static class AgbSynthProjectLoader
         int id = 0;
         foreach (string path in EnumerateAssetFiles(projectDirectory, GetAssetRoot(project), "wavememory", "*.agbwm"))
         {
+            string metadataPath = $"{path}.meta.json";
+            WaveMemoryMetadataDocument? metadata = null;
+            if (File.Exists(metadataPath))
+            {
+                try
+                {
+                    metadata = ReadDocument<WaveMemoryMetadataDocument>(project, metadataPath, AgbSynthFormatContracts.WaveMemoryMetadataFormat, allowLegacyMissingEnvelope: true);
+                }
+                catch (Exception ex) when (ex is JsonException or InvalidDataException or IOException)
+                {
+                    AddAssetDiagnostic(project, metadataPath, ex);
+                }
+            }
             project.WaveMemory.Add(new WaveMemoryProjectInfo
             {
+                AssetId = EnsureAssetId(metadata?.AssetId ?? string.Empty, string.Empty, AgbSynthFormatContracts.WaveMemoryMetadataFormat, path),
                 Id = id++,
                 FilePath = ToProjectRelativePath(projectDirectory, path),
-                Size = (int)Math.Min(16, new FileInfo(path).Length)
+                DataFormat = metadata?.DataFormat ?? "Mp2kPcm4WaveRam",
+                Size = (int)new FileInfo(path).Length
             });
         }
     }
@@ -241,9 +283,14 @@ public static class AgbSynthProjectLoader
         foreach (var header in project.SongHeaders)
         {
             VoiceGroupProjectInfo? voiceGroup = null;
-            if (!string.IsNullOrWhiteSpace(header.VoiceGroupFilePath))
+            if (!string.IsNullOrWhiteSpace(header.VoiceGroupAssetId))
             {
                 voiceGroup = project.VoiceGroups.FirstOrDefault(v =>
+                    string.Equals(v.AssetId, header.VoiceGroupAssetId, StringComparison.OrdinalIgnoreCase));
+            }
+            if (!string.IsNullOrWhiteSpace(header.VoiceGroupFilePath))
+            {
+                voiceGroup ??= project.VoiceGroups.FirstOrDefault(v =>
                     string.Equals(v.FilePath, header.VoiceGroupFilePath, StringComparison.OrdinalIgnoreCase));
             }
 
@@ -255,6 +302,7 @@ public static class AgbSynthProjectLoader
 
             header.VoiceGroupId = voiceGroup.Id;
             header.VoiceGroupFilePath = voiceGroup.FilePath;
+            header.VoiceGroupAssetId = voiceGroup.AssetId;
         }
     }
 
@@ -268,10 +316,29 @@ public static class AgbSynthProjectLoader
         foreach (var drumSet in project.DrumSets.Where(d => !string.IsNullOrWhiteSpace(d.FilePath)))
             drumSetsByPath.TryAdd(drumSet.FilePath, drumSet);
 
+        var assetsById = project.KeySplits.Cast<object>()
+            .Concat(project.DrumSets)
+            .Concat(project.WaveData)
+            .Concat(project.WaveMemory)
+            .Select(asset => asset switch
+            {
+                KeySplitAssetProjectInfo value => (AssetId: value.AssetId, FilePath: value.FilePath),
+                DrumSetAssetProjectInfo value => (AssetId: value.AssetId, FilePath: value.FilePath),
+                WaveDataProjectInfo value => (AssetId: value.AssetId, FilePath: value.FilePath),
+                WaveMemoryProjectInfo value => (AssetId: value.AssetId, FilePath: value.FilePath),
+                _ => (AssetId: string.Empty, FilePath: string.Empty)
+            })
+            .Where(value => !string.IsNullOrWhiteSpace(value.AssetId))
+            .ToDictionary(value => value.AssetId, value => value.FilePath, StringComparer.OrdinalIgnoreCase);
+
         foreach (var voiceGroup in project.VoiceGroups)
         {
             foreach (var voice in voiceGroup.Voices)
+            {
+                if (!string.IsNullOrWhiteSpace(voice.DataAssetId) && assetsById.TryGetValue(voice.DataAssetId, out string? resolvedPath))
+                    voice.DataFilePath = resolvedPath;
                 LinkVoiceToVoiceTables(voice, keySplitsByPath, drumSetsByPath);
+            }
         }
     }
 
@@ -382,45 +449,126 @@ public static class AgbSynthProjectLoader
         return Path.GetRelativePath(projectDirectory, path).Replace(Path.DirectorySeparatorChar, '/');
     }
 
-    private sealed class AgbSongTableDocument
+    private static void ValidateProjectEnvelope(AgbSynthProjectFile project, string path)
     {
-        public SongTableProjectInfo SongTable { get; set; } = new();
-        public List<SongTableEntryProjectInfo> Entries { get; set; } = new();
+        if (!string.Equals(project.Format, AgbSynthFormatContracts.ProjectFormat, StringComparison.Ordinal))
+            throw new InvalidDataException($"Unsupported project format '{project.Format}' in {path}.");
+        if (!string.Equals(project.Engine, AgbSynthFormatContracts.Engine, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"Unsupported sound engine '{project.Engine}' in {path}.");
+        if (project.Version <= 0)
+            throw new InvalidDataException($"Invalid project version {project.Version} in {path}.");
+        if (project.Version > AgbSynthFormatContracts.ProjectVersion)
+        {
+            project.IsReadOnly = true;
+            project.Diagnostics.Add(new ProjectDiagnostic(
+                ProjectDiagnosticSeverity.Warning,
+                "PROJECT_NEWER_VERSION",
+                $"Project version {project.Version} is newer than supported version {AgbSynthFormatContracts.ProjectVersion}. The project is read-only.",
+                path));
+        }
+        else if (project.Version < AgbSynthFormatContracts.ProjectVersion)
+        {
+            project.Diagnostics.Add(new ProjectDiagnostic(
+                ProjectDiagnosticSeverity.Info,
+                "PROJECT_MIGRATED",
+                $"Project version {project.Version} was migrated in memory to version {AgbSynthFormatContracts.ProjectVersion}.",
+                path));
+            project.Version = AgbSynthFormatContracts.ProjectVersion;
+        }
     }
 
-    private sealed class AgbSongHeaderDocument
+    private static T? ReadDocument<T>(
+        AgbSynthProjectFile project,
+        string path,
+        string expectedFormat,
+        bool allowLegacyMissingEnvelope = false)
+        where T : AgbAssetDocument
     {
-        public SongHeaderProjectInfo Header { get; set; } = new();
+        T? document = JsonSerializer.Deserialize<T>(File.ReadAllText(path), JsonOptions);
+        if (document is null)
+            return null;
+        if (string.IsNullOrWhiteSpace(document.Format) && allowLegacyMissingEnvelope)
+            document.Format = expectedFormat;
+        if (!string.Equals(document.Format, expectedFormat, StringComparison.Ordinal))
+            throw new InvalidDataException($"Expected {expectedFormat}, found '{document.Format}'.");
+        if (!string.Equals(document.Engine, AgbSynthFormatContracts.Engine, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"Unsupported sound engine '{document.Engine}'.");
+        if (document.Version <= 0)
+            throw new InvalidDataException($"Invalid asset version {document.Version}.");
+        if (document.Version > AgbSynthFormatContracts.AssetVersion)
+        {
+            project.IsReadOnly = true;
+            project.Diagnostics.Add(new ProjectDiagnostic(ProjectDiagnosticSeverity.Warning, "ASSET_NEWER_VERSION", $"Asset version {document.Version} is newer than supported version {AgbSynthFormatContracts.AssetVersion}.", path));
+        }
+        return document;
     }
 
-    private sealed class AgbVoiceGroupDocument
+    private static string EnsureAssetId(string documentId, string modelId, string format, string path)
     {
-        public int Id { get; set; }
-        public string Label { get; set; } = string.Empty;
-        public string Pointer { get; set; } = string.Empty;
-        public int Offset { get; set; }
-        public string DiscoverySource { get; set; } = "Referenced";
-        public List<int> UsedBySongIds { get; set; } = new();
-        public List<VoiceProjectInfo> Voices { get; set; } = new();
+        if (!string.IsNullOrWhiteSpace(documentId))
+            return documentId;
+        if (!string.IsNullOrWhiteSpace(modelId))
+            return modelId;
+        return AgbSynthFormatContracts.CreateLegacyAssetId(format, path);
     }
 
-    private sealed class AgbKeySplitDocument
+    private static void MigrateSequenceReference(SongHeaderProjectInfo header)
     {
-        public int VoiceGroupId { get; set; }
-        public int ParentVoiceIndex { get; set; }
-        public KeySplitProjectInfo KeySplit { get; set; } = new();
+        if (string.IsNullOrWhiteSpace(header.SequenceFilePath))
+        {
+            header.SequenceFilePath = header.SequenceFormat == SequenceAssetFormat.Midi2Agb
+                ? header.Midi2AgbFilePath
+                : header.MidiFilePath;
+        }
+        if (string.IsNullOrWhiteSpace(header.MidiFilePath) && header.SequenceFormat == SequenceAssetFormat.Midi)
+            header.MidiFilePath = header.SequenceFilePath;
+        if (string.IsNullOrWhiteSpace(header.Midi2AgbFilePath) && header.SequenceFormat == SequenceAssetFormat.Midi2Agb)
+            header.Midi2AgbFilePath = header.SequenceFilePath;
     }
 
-    private sealed class AgbDrumSetDocument
+    private static void LinkSongTableToHeaders(AgbSynthProjectFile project)
     {
-        public int VoiceGroupId { get; set; }
-        public int ParentVoiceIndex { get; set; }
-        public DrumSetProjectInfo DrumSet { get; set; } = new();
+        foreach (var song in project.Songs)
+        {
+            SongHeaderProjectInfo? header = null;
+            if (!string.IsNullOrWhiteSpace(song.SongHeaderAssetId))
+                header = project.SongHeaders.FirstOrDefault(value => string.Equals(value.AssetId, song.SongHeaderAssetId, StringComparison.OrdinalIgnoreCase));
+            if (header is null && !string.IsNullOrWhiteSpace(song.SongHeaderFilePath))
+                header = project.SongHeaders.FirstOrDefault(value => string.Equals(value.FilePath, song.SongHeaderFilePath, StringComparison.OrdinalIgnoreCase));
+            header ??= project.SongHeaders.FirstOrDefault(value => value.SongId == song.SongId);
+            if (header is null)
+                continue;
+            song.SongHeaderAssetId = header.AssetId;
+            song.SongHeaderFilePath = header.FilePath;
+        }
     }
 
-    private sealed class AgbWaveDataDocument
+    private static void LinkVoiceDataAssets(AgbSynthProjectFile project)
     {
-        public SampleHeaderProjectInfo Header { get; set; } = new();
-        public string DataFormat { get; set; } = "Signed8MonoPcm";
+        var idsByPath = project.KeySplits.Select(value => (value.FilePath, value.AssetId))
+            .Concat(project.DrumSets.Select(value => (value.FilePath, value.AssetId)))
+            .Concat(project.WaveData.Select(value => (value.FilePath, value.AssetId)))
+            .Concat(project.WaveMemory.Select(value => (value.FilePath, value.AssetId)))
+            .Where(value => !string.IsNullOrWhiteSpace(value.FilePath))
+            .ToDictionary(value => value.FilePath, value => value.AssetId, StringComparer.OrdinalIgnoreCase);
+        foreach (var voice in project.VoiceGroups.SelectMany(group => group.Voices))
+            LinkVoiceDataAsset(voice, idsByPath);
+    }
+
+    private static void LinkVoiceDataAsset(VoiceProjectInfo voice, IReadOnlyDictionary<string, string> idsByPath)
+    {
+        if (string.IsNullOrWhiteSpace(voice.DataAssetId) && idsByPath.TryGetValue(voice.DataFilePath, out string? assetId))
+            voice.DataAssetId = assetId;
+        if (voice.KeySplit is not null)
+            foreach (var child in voice.KeySplit.Regions)
+                LinkVoiceDataAsset(child, idsByPath);
+        if (voice.DrumSet is not null)
+            foreach (var child in voice.DrumSet.Entries)
+                LinkVoiceDataAsset(child, idsByPath);
+    }
+
+    private static void AddAssetDiagnostic(AgbSynthProjectFile project, string path, Exception exception)
+    {
+        project.Diagnostics.Add(new ProjectDiagnostic(ProjectDiagnosticSeverity.Error, "ASSET_LOAD_FAILED", exception.Message, path));
     }
 }

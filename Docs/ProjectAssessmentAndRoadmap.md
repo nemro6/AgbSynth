@@ -464,7 +464,7 @@ Validate -> Compile assets -> Deduplicate -> Layout -> Fixup -> Emit -> Reparse 
 
 ### Phase 2: プロジェクト形式の確定
 
-進捗: 2026-07-12の判断によりPhase 3を先行。Phase 2は保留中。
+進捗（2026-07-12）: 共通資産envelope、AssetId、v3/v1 migration、Format/Version/Engine検証、読み取り専用保護、Project Diagnostics、WaveMemory metadata v2、仕様書を実装。rename復旧・壊れた資産・新旧versionのfixtureを追加し、Phase 2のコアを完了。
 
 目的: 新規作成、手動追加、将来Migrationに耐える形式にする。
 
@@ -512,6 +512,8 @@ Validate -> Compile assets -> Deduplicate -> Layout -> Fixup -> Emit -> Reparse 
 - FireRed/Emeraldの代表曲を実再生し、前回のようなテンポ揺れやトラック間ずれがない
 
 ### Phase 4: MIDI/Midi2agb相互運用
+
+進捗（2026-07-12）: SongHeaderへSequence Format/Active Sequence参照を追加し、ROM抽出時の`MIDI / Midi2agb / Both`選択、Midi2agb parser/writer、MP2Kバイト列からの直接逆アセンブル、共通再生pipelineを実装。PATT、REPT、track loop、Tempo、Tie、MEMACC、XCMDのfixtureを追加。コンパイラIRへの確定とbyte-identical再コンパイル、重複フレーズ最適化はPhase 5接続時に継続する。
 
 目的: 通常のMIDI制作と高度なMidi2agb編集をSongHeaderごとに選択できるようにする。
 

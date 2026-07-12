@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using AgbSynth.App.Audio;
 using AgbSynth.App.MIDI;
 using AgbSynth.App.MP2K;
+using AgbSynth.App.MP2K.Sequence;
 
 namespace AgbSynth.App.ViewModels;
 
@@ -127,10 +128,10 @@ public sealed partial class MainWindowViewModel
 
         SynchronizePlaybackSelection(sequence);
 
-        string? midiPath = ResolveSequenceMidiPath(sequence);
-        if (string.IsNullOrWhiteSpace(midiPath) || !File.Exists(midiPath))
+        string? sequencePath = ResolveSequencePath(sequence);
+        if (string.IsNullOrWhiteSpace(sequencePath) || !File.Exists(sequencePath))
         {
-            SequenceStatus = $"MIDI file not found: {sequence.MidiFilePath}";
+            SequenceStatus = $"Sequence file not found: {sequence.SequenceFilePath}";
             return;
         }
 
@@ -143,11 +144,11 @@ public sealed partial class MainWindowViewModel
         MidiPlaybackFile midi;
         try
         {
-            midi = await Task.Run(() => MidiFileReader.Read(midiPath));
+            midi = await Task.Run(() => SequenceFileService.Load(sequencePath, sequence.SequenceFormat, _midiCcMapping));
         }
         catch (Exception ex)
         {
-            SequenceStatus = $"MIDI load failed: {ex.Message}";
+            SequenceStatus = $"Sequence load failed: {ex.Message}";
             return;
         }
 
@@ -166,7 +167,7 @@ public sealed partial class MainWindowViewModel
         _sequencePlaybackCts = cts;
         IsSequencePaused = false;
         IsSequencePlaying = true;
-        SequenceStatus = $"Playing Song {sequence.SongId:D3}: {Path.GetFileName(midiPath)}";
+        SequenceStatus = $"Playing Song {sequence.SongId:D3}: {Path.GetFileName(sequencePath)}";
 
         _sequencePlaybackTask = RunSequencePlaybackAsync(sequence, midi, voiceBank, cts.Token);
         try
@@ -469,17 +470,18 @@ public sealed partial class MainWindowViewModel
         AudioEngine.ConfigureReverb(_reverbEnabled ? level : 0, _fixedDirectSoundSampleRate);
     }
 
-    private string? ResolveSequenceMidiPath(SequenceHeaderRow sequence)
+    private string? ResolveSequencePath(SequenceHeaderRow sequence)
     {
-        if (string.IsNullOrWhiteSpace(sequence.MidiFilePath))
+        string sequenceFilePath = sequence.SequenceFilePath;
+        if (string.IsNullOrWhiteSpace(sequenceFilePath))
             return null;
-        if (Path.IsPathRooted(sequence.MidiFilePath))
-            return sequence.MidiFilePath;
+        if (Path.IsPathRooted(sequenceFilePath))
+            return sequenceFilePath;
         if (string.IsNullOrWhiteSpace(_currentProjectPath))
-            return Path.GetFullPath(sequence.MidiFilePath);
+            return Path.GetFullPath(sequenceFilePath);
 
         string projectDirectory = Path.GetDirectoryName(_currentProjectPath) ?? ".";
-        return Path.GetFullPath(Path.Combine(projectDirectory, sequence.MidiFilePath.Replace('/', Path.DirectorySeparatorChar)));
+        return Path.GetFullPath(Path.Combine(projectDirectory, sequenceFilePath.Replace('/', Path.DirectorySeparatorChar)));
     }
 
     private void ResetMidiPlaybackState(int defaultVolume)

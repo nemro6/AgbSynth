@@ -11,8 +11,10 @@ public static class AgbSynthProjectAssetWriter
 
     public static byte[] SerializeSongTable(SongTableProjectInfo songTable, List<SongTableEntryProjectInfo> entries)
     {
+        songTable.AssetId = EnsureAssetId(songTable.AssetId);
         return SerializeJson(new SongTableDocument
         {
+            AssetId = songTable.AssetId,
             SongTable = songTable,
             Entries = entries
         });
@@ -20,15 +22,20 @@ public static class AgbSynthProjectAssetWriter
 
     public static byte[] SerializeSongHeader(SongHeaderProjectInfo header)
     {
-        return SerializeJson(new SongHeaderDocument { Header = header });
+        header.AssetId = EnsureAssetId(header.AssetId);
+        return SerializeJson(new SongHeaderDocument { AssetId = header.AssetId, Header = header });
     }
 
     public static byte[] SerializeVoiceGroup(VoiceGroupProjectInfo voiceGroup)
     {
+        voiceGroup.AssetId = EnsureAssetId(voiceGroup.AssetId);
         return SerializeJson(new VoiceGroupDocument
         {
+            AssetId = voiceGroup.AssetId,
             Id = voiceGroup.Id,
             Label = voiceGroup.Label,
+            Pointer = voiceGroup.Pointer,
+            Offset = voiceGroup.Offset,
             DiscoverySource = voiceGroup.DiscoverySource,
             UsedBySongIds = voiceGroup.UsedBySongIds,
             Voices = voiceGroup.Voices
@@ -37,8 +44,10 @@ public static class AgbSynthProjectAssetWriter
 
     public static byte[] SerializeKeySplit(KeySplitAssetProjectInfo keySplit)
     {
+        keySplit.AssetId = EnsureAssetId(keySplit.AssetId);
         return SerializeJson(new KeySplitDocument
         {
+            AssetId = keySplit.AssetId,
             VoiceGroupId = keySplit.VoiceGroupId,
             ParentVoiceIndex = keySplit.ParentVoiceIndex,
             KeySplit = keySplit.KeySplit
@@ -47,8 +56,10 @@ public static class AgbSynthProjectAssetWriter
 
     public static byte[] SerializeDrumSet(DrumSetAssetProjectInfo drumSet)
     {
+        drumSet.AssetId = EnsureAssetId(drumSet.AssetId);
         return SerializeJson(new DrumSetDocument
         {
+            AssetId = drumSet.AssetId,
             VoiceGroupId = drumSet.VoiceGroupId,
             ParentVoiceIndex = drumSet.ParentVoiceIndex,
             DrumSet = drumSet.DrumSet
@@ -88,52 +99,6 @@ public static class AgbSynthProjectAssetWriter
         File.WriteAllBytes(path, data);
     }
 
-    private sealed class SongTableDocument
-    {
-        public string Format { get; set; } = "AgbSynthSongTable";
-        public int Version { get; set; } = 1;
-        public string Engine { get; set; } = "MP2K";
-        public SongTableProjectInfo SongTable { get; set; } = new();
-        public List<SongTableEntryProjectInfo> Entries { get; set; } = new();
-    }
-
-    private sealed class SongHeaderDocument
-    {
-        public string Format { get; set; } = "AgbSynthSongHeader";
-        public int Version { get; set; } = 1;
-        public string Engine { get; set; } = "MP2K";
-        public SongHeaderProjectInfo Header { get; set; } = new();
-    }
-
-    private sealed class VoiceGroupDocument
-    {
-        public string Format { get; set; } = "AgbSynthVoiceGroup";
-        public int Version { get; set; } = 1;
-        public string Engine { get; set; } = "MP2K";
-        public int Id { get; set; }
-        public string Label { get; set; } = string.Empty;
-        public string DiscoverySource { get; set; } = "User";
-        public List<int> UsedBySongIds { get; set; } = new();
-        public List<VoiceProjectInfo> Voices { get; set; } = new();
-    }
-
-    private sealed class KeySplitDocument
-    {
-        public string Format { get; set; } = "AgbSynthKeySplit";
-        public int Version { get; set; } = 1;
-        public string Engine { get; set; } = "MP2K";
-        public int VoiceGroupId { get; set; } = -1;
-        public int ParentVoiceIndex { get; set; } = -1;
-        public KeySplitProjectInfo KeySplit { get; set; } = new();
-    }
-
-    private sealed class DrumSetDocument
-    {
-        public string Format { get; set; } = "AgbSynthDrumSet";
-        public int Version { get; set; } = 1;
-        public string Engine { get; set; } = "MP2K";
-        public int VoiceGroupId { get; set; } = -1;
-        public int ParentVoiceIndex { get; set; } = -1;
-        public DrumSetProjectInfo DrumSet { get; set; } = new();
-    }
+    private static string EnsureAssetId(string assetId) =>
+        string.IsNullOrWhiteSpace(assetId) ? AgbSynthFormatContracts.NewAssetId() : assetId;
 }

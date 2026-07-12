@@ -1459,7 +1459,7 @@
                     <Grid ColumnDefinitions="*,28">
                       <TextBlock Grid.Column="0"
                                  Classes="songHeaderText"
-                                 Text="{Binding MidiDisplay}"
+                                 Text="{Binding SequenceDisplay}"
                                  TextTrimming="CharacterEllipsis"
                                  Margin="8,0,4,0"/>
                       <Button Grid.Column="1"

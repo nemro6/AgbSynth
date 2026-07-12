@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using AgbSynth.App.GBA;
+using AgbSynth.App.MP2K.Sequence;
 using AgbSynth.App.Project;
 
 namespace AgbSynth.App.ViewModels;
@@ -153,7 +154,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
 
     public bool CanEditSelectedSequence => SelectedSequence is not null;
 
-    public string SelectedSequenceMidiFilePath => SelectedSequence?.MidiFilePath ?? string.Empty;
+    public string SelectedSequenceMidiFilePath => SelectedSequence?.SequenceFilePath ?? string.Empty;
 
     public void SetPlaybackSelectionSourceFromTabIndex(int tabIndex)
     {
@@ -528,7 +529,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
         {
             RomStatus = "Creating project file...";
             SongTableStatus = "Extracting song table...";
-            SequenceStatus = "Extracting song headers and MIDI files...";
+            SequenceStatus = "Extracting song headers and sequence files...";
             VoiceGroupStatus = "Extracting voice groups...";
             KeySplitStatus = "Extracting key splits...";
             DrumSetStatus = "Extracting drum sets...";
@@ -539,10 +540,10 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
             {
                 var created = AgbSynthProjectExporter.CreateFromRom(rom, importOptions);
                 int voiceGroupAssetCount = AgbSynthProjectVoiceGroupExporter.ExportVoiceGroups(rom, created, outputPath);
-                int midiCount = AgbSynthProjectMidiExporter.ExportMidiFiles(rom, created, outputPath, _midiCcMapping);
+                var sequenceExport = AgbSynthProjectMidiExporter.ExportSequenceFiles(rom, created, outputPath, importOptions.SequenceExportMode, _midiCcMapping);
                 int sequenceAssetCount = AgbSynthProjectSequenceExporter.ExportSongTableAndHeaders(created, outputPath);
                 AgbSynthProjectExporter.Save(outputPath, created);
-                return (Project: created, MidiCount: midiCount, VoiceGroupAssetCount: voiceGroupAssetCount, SequenceAssetCount: sequenceAssetCount);
+                return (Project: created, SequenceExport: sequenceExport, VoiceGroupAssetCount: voiceGroupAssetCount, SequenceAssetCount: sequenceAssetCount);
             });
             BeginProjectSession(result.Project, outputPath);
             LoadSongTable(result.Project);
@@ -554,7 +555,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
             CompleteProjectSession();
             RomStatus = $"Project created: {Path.GetFileName(outputPath)} ({result.Project.SongTable.ValidEntryCount:N0} song table entries)";
             SongTableStatus = $"Loaded {result.Project.Songs.Count:N0} entries. Exported {result.Project.SongTable.FilePath}.";
-            SequenceStatus = $"Loaded {result.Project.SongHeaders.Count:N0} headers. Exported {result.MidiCount:N0} MIDI files.";
+            SequenceStatus = $"Loaded {result.Project.SongHeaders.Count:N0} headers. Exported {result.SequenceExport.MidiCount:N0} MIDI and {result.SequenceExport.Midi2AgbCount:N0} Midi2agb files ({result.SequenceExport.LossCount:N0} conversion notices).";
             VoiceGroupStatus = $"Loaded {result.Project.VoiceGroups.Count:N0} voice groups. Exported {result.VoiceGroupAssetCount:N0} voice assets.";
             KeySplitStatus = $"Loaded {KeySplitOptions.Count:N0} key splits.";
             DrumSetStatus = $"Loaded {DrumSetOptions.Count:N0} drum sets.";
@@ -655,7 +656,9 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
             CompleteProjectSession();
 
             string projectName = Path.GetFileName(projectPath);
-            RomStatus = $"Project opened: {projectName}";
+            RomStatus = project.IsReadOnly
+                ? $"Project opened read-only: {projectName}. {ProjectDiagnosticsSummary}."
+                : $"Project opened: {projectName}. Diagnostics: {ProjectDiagnosticsSummary}.";
             SongTableStatus = $"Loaded {project.Songs.Count:N0} entries from {project.SongTable.FilePath}.";
             SequenceStatus = $"Loaded {project.SongHeaders.Count:N0} headers.";
             VoiceGroupStatus = $"Loaded {project.VoiceGroups.Count:N0} voice groups from folder.";
@@ -982,7 +985,10 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
 
     public string? GetMidiDirectoryPath()
     {
-        return GetProjectAssetDirectoryPath("midi", Sequences.Select(s => s.MidiFilePath));
+        SequenceAssetFormat format = SelectedSequence?.SequenceFormat ?? SequenceAssetFormat.Midi;
+        return GetProjectAssetDirectoryPath(
+            format == SequenceAssetFormat.Midi2Agb ? "midi2agb" : "midi",
+            Sequences.Select(s => s.SequenceFilePath));
     }
 
     public string? GetVoiceGroupDirectoryPath()
@@ -1015,10 +1021,31 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged
         if (string.IsNullOrWhiteSpace(selectedPath))
             return;
 
-        row.MidiFilePath = ToProjectRelativePath(selectedPath);
-        row.TrackCount = DetectMidiTrackCount(selectedPath);
+        string relativePath = ToProjectRelativePath(selectedPath);
+        row.SequenceFormat = SequenceFileService.DetectFormat(selectedPath);
+        row.SequenceFilePath = relativePath;
+        if (row.SequenceFormat == SequenceAssetFormat.Midi2Agb)
+            row.Midi2AgbFilePath = relativePath;
+        else
+            row.MidiFilePath = relativePath;
+        row.TrackCount = DetectSequenceTrackCount(selectedPath, row.SequenceFormat);
         if (SelectedSequence == row)
             OnPropertyChanged(nameof(SelectedSequenceMidiFilePath));
+    }
+
+    private int DetectSequenceTrackCount(string path, SequenceAssetFormat format)
+    {
+        try
+        {
+            if (format == SequenceAssetFormat.Midi)
+                return DetectMidiTrackCount(path);
+            var sequence = SequenceFileService.Load(path, format, _midiCcMapping);
+            return sequence.Events.Where(value => value.TrackIndex >= 0).Select(value => value.TrackIndex).Distinct().Count();
+        }
+        catch
+        {
+            return 0;
+        }
     }
 
     public void SetSequenceVoiceGroupFile(SequenceHeaderRow row, string selectedPath)

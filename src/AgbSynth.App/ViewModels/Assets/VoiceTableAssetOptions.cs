@@ -16,6 +16,7 @@ public sealed class VoiceGroupOption : INotifyPropertyChanged, INotifyPropertyCh
     private string _label = string.Empty;
 
     public int Id { get; init; }
+    public string AssetId { get; init; } = string.Empty;
     public string Label
     {
         get => _label;
@@ -48,6 +49,7 @@ public sealed class VoiceGroupOption : INotifyPropertyChanged, INotifyPropertyCh
         return new VoiceGroupOption
         {
             Id = voiceGroup.Id,
+            AssetId = voiceGroup.AssetId,
             Label = voiceGroup.Label,
             Pointer = voiceGroup.Pointer,
             Offset = voiceGroup.Offset,
@@ -100,6 +102,7 @@ public sealed class KeySplitOption : INotifyPropertyChanged, INotifyPropertyChan
     private string _label = string.Empty;
 
     public int Id { get; set; }
+    public string AssetId { get; init; } = string.Empty;
     public string Label
     {
         get => _label;
@@ -126,6 +129,7 @@ public sealed class KeySplitOption : INotifyPropertyChanged, INotifyPropertyChan
         return new KeySplitOption
         {
             Id = asset.Id,
+            AssetId = asset.AssetId,
             Label = string.IsNullOrWhiteSpace(asset.Label) ? Path.GetFileNameWithoutExtension(asset.FilePath) : asset.Label,
             FilePath = asset.FilePath,
             VoiceGroupId = asset.VoiceGroupId,
@@ -175,6 +179,7 @@ public sealed class DrumSetOption : INotifyPropertyChanged, INotifyPropertyChang
     private string _label = string.Empty;
 
     public int Id { get; set; }
+    public string AssetId { get; init; } = string.Empty;
     public string Label
     {
         get => _label;
@@ -201,6 +206,7 @@ public sealed class DrumSetOption : INotifyPropertyChanged, INotifyPropertyChang
         return new DrumSetOption
         {
             Id = asset.Id,
+            AssetId = asset.AssetId,
             Label = string.IsNullOrWhiteSpace(asset.Label) ? Path.GetFileNameWithoutExtension(asset.FilePath) : asset.Label,
             FilePath = asset.FilePath,
             VoiceGroupId = asset.VoiceGroupId,

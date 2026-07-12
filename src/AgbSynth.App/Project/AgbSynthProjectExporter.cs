@@ -17,6 +17,7 @@ public static class AgbSynthProjectExporter
         "songtable",
         "songheader",
         "midi",
+        "midi2agb",
         "voicegroup",
         "keysplit",
         "drumset",
@@ -47,7 +48,8 @@ public static class AgbSynthProjectExporter
                 Import = new ImportProjectInfo
                 {
                     ReadMode = "NewProject",
-                    IncludeUnreferencedVoiceGroups = false
+                    IncludeUnreferencedVoiceGroups = false,
+                    SequenceExportMode = SequenceExportMode.Midi
                 },
                 SongTable = new SongTableProjectInfo
                 {
@@ -167,7 +169,8 @@ public static class AgbSynthProjectExporter
             Import = new ImportProjectInfo
             {
                 ReadMode = options.ReadMode.ToString(),
-                IncludeUnreferencedVoiceGroups = options.IncludeUnreferencedVoiceGroups
+                IncludeUnreferencedVoiceGroups = options.IncludeUnreferencedVoiceGroups,
+                SequenceExportMode = options.SequenceExportMode
             },
             Rom = new RomProjectInfo
             {
@@ -204,11 +207,18 @@ public static class AgbSynthProjectExporter
 
     public static void Save(string outputPath, AgbSynthProjectFile project)
     {
+        if (project.IsReadOnly)
+            throw new InvalidOperationException("This project was created by a newer AgbSynth version and cannot be overwritten.");
         File.WriteAllBytes(outputPath, Serialize(project));
     }
 
     public static byte[] Serialize(AgbSynthProjectFile project)
     {
+        if (project.IsReadOnly)
+            throw new InvalidOperationException("This project was created by a newer AgbSynth version and cannot be overwritten.");
+        project.Format = AgbSynthFormatContracts.ProjectFormat;
+        project.Version = AgbSynthFormatContracts.ProjectVersion;
+        project.Engine = AgbSynthFormatContracts.Engine;
         var options = new JsonSerializerOptions { WriteIndented = true };
         return JsonSerializer.SerializeToUtf8Bytes(project, options);
     }

@@ -2,11 +2,11 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="AgbSynth.App.SongTableAddressWindow"
         Width="360"
-        Height="238"
+        Height="292"
         MinWidth="360"
         MaxWidth="360"
-        MinHeight="238"
-        MaxHeight="238"
+        MinHeight="292"
+        MaxHeight="292"
         CanResize="False"
         Title="MP2K Import Options"
         Background="{DynamicResource AppSurfaceAltBrush}">
@@ -42,7 +42,7 @@
       </Style>
     </Border.Styles>
 
-    <Grid RowDefinitions="Auto,4,Auto,10,Auto,4,Auto,10,Auto,*,Auto">
+    <Grid RowDefinitions="Auto,4,Auto,10,Auto,4,Auto,10,Auto,4,Auto,10,Auto,*,Auto">
       <TextBlock Text="Read Mode"/>
       <ComboBox x:Name="ReadModeComboBox"
                 Grid.Row="2"
@@ -63,17 +63,23 @@
                  Grid.Column="1"
                  Watermark="2C5638 or 082C5638"/>
       </Grid>
+      <TextBlock Grid.Row="8" Text="Sequence Export"/>
+      <ComboBox x:Name="SequenceFormatComboBox" Grid.Row="10">
+        <ComboBoxItem Content="MIDI"/>
+        <ComboBoxItem Content="Midi2agb (.s)"/>
+        <ComboBoxItem Content="Both"/>
+      </ComboBox>
       <CheckBox x:Name="IncludeUnreferencedCheckBox"
-                Grid.Row="8"
+                Grid.Row="12"
                 Content="Include unreferenced VoiceGroups"
                 FontFamily="Consolas"
                 FontSize="11"/>
 
       <TextBlock x:Name="ErrorTextBlock"
-                 Grid.Row="9"
+                 Grid.Row="13"
                  VerticalAlignment="Center"
                  Foreground="#FF8A8A"/>
-      <StackPanel Grid.Row="10"
+      <StackPanel Grid.Row="14"
                   Orientation="Horizontal"
                   Spacing="8"
                   HorizontalAlignment="Right">

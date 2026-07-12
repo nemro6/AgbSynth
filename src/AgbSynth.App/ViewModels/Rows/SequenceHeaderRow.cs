@@ -23,11 +23,15 @@ public sealed class SequenceHeaderRow : INotifyPropertyChanged, INotifyPropertyC
     private string _voiceGroupFilePath = string.Empty;
     private string _voiceGroupDisplay = string.Empty;
     private string _midiFilePath = string.Empty;
+    private string _midi2AgbFilePath = string.Empty;
+    private string _sequenceFilePath = string.Empty;
+    private SequenceAssetFormat _sequenceFormat;
     private string _note = string.Empty;
     private bool _isSelected;
     private bool _isPointerOver;
 
     public int SongId { get; init; }
+    public string AssetId { get; set; } = string.Empty;
     public string FilePath { get; set; } = string.Empty;
     public string Label
     {
@@ -133,6 +137,38 @@ public sealed class SequenceHeaderRow : INotifyPropertyChanged, INotifyPropertyC
         ? string.Empty
         : Path.GetFileName(MidiFilePath);
 
+    public string Midi2AgbFilePath
+    {
+        get => _midi2AgbFilePath;
+        set => SetField(ref _midi2AgbFilePath, value ?? string.Empty);
+    }
+
+    public SequenceAssetFormat SequenceFormat
+    {
+        get => _sequenceFormat;
+        set
+        {
+            if (SetField(ref _sequenceFormat, value))
+                OnPropertyChanged(nameof(SequenceDisplay));
+        }
+    }
+
+    public string SequenceFilePath
+    {
+        get => string.IsNullOrWhiteSpace(_sequenceFilePath)
+            ? (SequenceFormat == SequenceAssetFormat.Midi2Agb ? Midi2AgbFilePath : MidiFilePath)
+            : _sequenceFilePath;
+        set
+        {
+            if (SetField(ref _sequenceFilePath, value ?? string.Empty))
+                OnPropertyChanged(nameof(SequenceDisplay));
+        }
+    }
+
+    public string SequenceDisplay => string.IsNullOrWhiteSpace(SequenceFilePath)
+        ? string.Empty
+        : $"{Path.GetFileName(SequenceFilePath)} [{(SequenceFormat == SequenceAssetFormat.Midi2Agb ? "Midi2agb" : "MIDI")}]";
+
     public string Note
     {
         get => _note;
@@ -166,6 +202,7 @@ public sealed class SequenceHeaderRow : INotifyPropertyChanged, INotifyPropertyC
         return new SequenceHeaderRow
         {
             SongId = header.SongId,
+            AssetId = header.AssetId,
             FilePath = header.FilePath,
             Label = header.Label,
             HeaderOffset = header.HeaderOffset,
@@ -177,6 +214,9 @@ public sealed class SequenceHeaderRow : INotifyPropertyChanged, INotifyPropertyC
             VoiceGroupOffset = header.VoiceGroupOffset,
             VoiceGroupFilePath = header.VoiceGroupFilePath,
             MidiFilePath = header.MidiFilePath,
+            Midi2AgbFilePath = header.Midi2AgbFilePath,
+            SequenceFormat = header.SequenceFormat,
+            SequenceFilePath = header.SequenceFilePath,
             Note = header.Note
         };
     }
@@ -195,15 +235,21 @@ public sealed class SequenceHeaderRow : INotifyPropertyChanged, INotifyPropertyC
             VoiceGroupOffset = VoiceGroupOffset,
             VoiceGroupFilePath = VoiceGroupFilePath,
             MidiFilePath = MidiFilePath,
+            Midi2AgbFilePath = Midi2AgbFilePath,
+            SequenceFormat = SequenceFormat,
+            SequenceFilePath = SequenceFilePath,
             Note = Note
         };
     }
 
     public SongHeaderProjectInfo ToProjectInfo()
     {
+        if (string.IsNullOrWhiteSpace(AssetId))
+            AssetId = AgbSynthFormatContracts.NewAssetId();
         return new SongHeaderProjectInfo
         {
             SongId = SongId,
+            AssetId = AssetId,
             FilePath = FilePath,
             Label = Label,
             HeaderOffset = HeaderOffset,
@@ -215,6 +261,9 @@ public sealed class SequenceHeaderRow : INotifyPropertyChanged, INotifyPropertyC
             VoiceGroupOffset = VoiceGroupOffset,
             VoiceGroupFilePath = VoiceGroupFilePath,
             MidiFilePath = MidiFilePath,
+            Midi2AgbFilePath = Midi2AgbFilePath,
+            SequenceFormat = SequenceFormat,
+            SequenceFilePath = SequenceFilePath,
             Note = Note
         };
     }

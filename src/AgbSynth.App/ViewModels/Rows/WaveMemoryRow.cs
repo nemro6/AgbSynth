@@ -26,6 +26,7 @@ public sealed class WaveMemoryRow : INotifyPropertyChanged, INotifyPropertyChang
     private bool _isPointerOver;
 
     public int Id { get; init; }
+    public string AssetId { get; init; } = string.Empty;
     public string IdText => Id.ToString("D3");
     public string FilePath { get; init; } = string.Empty;
     public string ProjectDirectory { get; init; } = string.Empty;
@@ -97,6 +98,7 @@ public sealed class WaveMemoryRow : INotifyPropertyChanged, INotifyPropertyChang
         return new WaveMemoryRow
         {
             Id = waveMemory.Id,
+            AssetId = waveMemory.AssetId,
             FilePath = waveMemory.FilePath,
             ProjectDirectory = projectDirectory,
             DataFormat = string.IsNullOrWhiteSpace(waveMemory.DataFormat) ? "Mp2kPcm4WaveRam" : waveMemory.DataFormat,
@@ -109,6 +111,7 @@ public sealed class WaveMemoryRow : INotifyPropertyChanged, INotifyPropertyChang
         var row = new WaveMemoryRow
         {
             Id = id,
+            AssetId = AgbSynthFormatContracts.NewAssetId(),
             FilePath = filePath,
             ProjectDirectory = projectDirectory,
             DataFormat = "Mp2kPcm4WaveRam",
@@ -124,6 +127,7 @@ public sealed class WaveMemoryRow : INotifyPropertyChanged, INotifyPropertyChang
         var row = new WaveMemoryRow
         {
             Id = id,
+            AssetId = AgbSynthFormatContracts.NewAssetId(),
             FilePath = filePath,
             ProjectDirectory = ProjectDirectory,
             DataFormat = DataFormat,
@@ -165,14 +169,14 @@ public sealed class WaveMemoryRow : INotifyPropertyChanged, INotifyPropertyChang
         string? metadataPath = ResolveMetadataPath();
         if (metadataPath is not null)
         {
-            var metadata = new WaveMemoryMetadata { Label = Label, Note = Note };
+            var metadata = CreateMetadata();
             File.WriteAllText(metadataPath, JsonSerializer.Serialize(metadata, MetadataJsonOptions));
         }
     }
 
     public byte[] CreateMetadataBytes()
     {
-        var metadata = new WaveMemoryMetadata { Label = Label, Note = Note };
+        var metadata = CreateMetadata();
         return JsonSerializer.SerializeToUtf8Bytes(metadata, MetadataJsonOptions);
     }
 
@@ -186,7 +190,7 @@ public sealed class WaveMemoryRow : INotifyPropertyChanged, INotifyPropertyChang
         {
             try
             {
-                var metadata = JsonSerializer.Deserialize<WaveMemoryMetadata>(File.ReadAllText(path), MetadataJsonOptions);
+                var metadata = JsonSerializer.Deserialize<WaveMemoryMetadataDocument>(File.ReadAllText(path), MetadataJsonOptions);
                 if (metadata is not null)
                 {
                     _label = metadata.Label ?? _label;
@@ -260,11 +264,7 @@ public sealed class WaveMemoryRow : INotifyPropertyChanged, INotifyPropertyChang
             if (!string.IsNullOrWhiteSpace(directory))
                 Directory.CreateDirectory(directory);
 
-            var metadata = new WaveMemoryMetadata
-            {
-                Label = Label,
-                Note = Note
-            };
+            var metadata = CreateMetadata();
             File.WriteAllText(path, JsonSerializer.Serialize(metadata, MetadataJsonOptions));
         }
         catch (IOException)
@@ -339,9 +339,15 @@ public sealed class WaveMemoryRow : INotifyPropertyChanged, INotifyPropertyChang
         return true;
     }
 
-    private sealed class WaveMemoryMetadata
+    private WaveMemoryMetadataDocument CreateMetadata()
     {
-        public string Label { get; set; } = string.Empty;
-        public string Note { get; set; } = string.Empty;
+        return new WaveMemoryMetadataDocument
+        {
+            AssetId = AssetId,
+            Label = Label,
+            Note = Note,
+            DataFormat = DataFormat,
+            Size = Size
+        };
     }
 }

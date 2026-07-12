@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using AgbSynth.App.Project;
 
 namespace AgbSynth.App.ViewModels;
@@ -25,6 +26,9 @@ public sealed partial class MainWindowViewModel
         nameof(SequenceHeaderRow.Reverb),
         nameof(SequenceHeaderRow.VoiceGroupFilePath),
         nameof(SequenceHeaderRow.MidiFilePath),
+        nameof(SequenceHeaderRow.Midi2AgbFilePath),
+        nameof(SequenceHeaderRow.SequenceFilePath),
+        nameof(SequenceHeaderRow.SequenceFormat),
         nameof(SequenceHeaderRow.Note)
     ];
 
@@ -85,9 +89,20 @@ public sealed partial class MainWindowViewModel
         }
     }
 
-    public bool CanSaveProject => _currentProject is not null && IsProjectDirty && !IsSavingProject;
-    public bool CanUndoProject => _currentProject is not null && _projectHistoryPosition > 0 && !IsSavingProject;
-    public bool CanRedoProject => _currentProject is not null && _projectHistoryPosition < _projectHistory.Count && !IsSavingProject;
+    public bool CanSaveProject => _currentProject is { IsReadOnly: false } && IsProjectDirty && !IsSavingProject;
+    public bool CanUndoProject => _currentProject is { IsReadOnly: false } && _projectHistoryPosition > 0 && !IsSavingProject;
+    public bool CanRedoProject => _currentProject is { IsReadOnly: false } && _projectHistoryPosition < _projectHistory.Count && !IsSavingProject;
+    public IReadOnlyList<ProjectDiagnostic> CurrentProjectDiagnostics =>
+        _currentProject is null ? Array.Empty<ProjectDiagnostic>() : _currentProject.Diagnostics;
+    public string ProjectDiagnosticsSummary
+    {
+        get
+        {
+            int errors = CurrentProjectDiagnostics.Count(value => value.Severity == ProjectDiagnosticSeverity.Error);
+            int warnings = CurrentProjectDiagnostics.Count(value => value.Severity == ProjectDiagnosticSeverity.Warning);
+            return $"{errors} errors, {warnings} warnings";
+        }
+    }
 
     public string WindowTitle
     {
@@ -123,6 +138,8 @@ public sealed partial class MainWindowViewModel
         ResetProjectHistory();
         IsProjectDirty = false;
         OnPropertyChanged(nameof(WindowTitle));
+        OnPropertyChanged(nameof(CurrentProjectDiagnostics));
+        OnPropertyChanged(nameof(ProjectDiagnosticsSummary));
     }
 
     private void CompleteProjectSession()

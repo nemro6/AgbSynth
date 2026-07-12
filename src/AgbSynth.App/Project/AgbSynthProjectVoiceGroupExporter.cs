@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using AgbSynth.App.GBA;
 
 namespace AgbSynth.App.Project;
@@ -44,7 +44,11 @@ public static class AgbSynthProjectVoiceGroupExporter
             options);
 
         foreach (var voiceGroup in project.VoiceGroups)
+        {
+            if (string.IsNullOrWhiteSpace(voiceGroup.AssetId))
+                voiceGroup.AssetId = AgbSynthFormatContracts.NewAssetId();
             ExportVoiceSubFiles(context, voiceGroup);
+        }
         project.WaveData.AddRange(context.WaveData);
         project.WaveMemory.AddRange(context.WaveMemory);
 
@@ -55,8 +59,9 @@ public static class AgbSynthProjectVoiceGroupExporter
             string path = Path.Combine(voiceGroupDirectory, fileName);
             if (string.IsNullOrWhiteSpace(voiceGroup.Label))
                 voiceGroup.Label = Path.GetFileNameWithoutExtension(fileName);
-            var document = new AgbVoiceGroupDocument
+            var document = new VoiceGroupDocument
             {
+                AssetId = voiceGroup.AssetId,
                 Pointer = voiceGroup.Pointer,
                 Offset = voiceGroup.Offset,
                 Id = voiceGroup.Id,
@@ -101,21 +106,24 @@ public static class AgbSynthProjectVoiceGroupExporter
                 string path = Path.Combine(context.DrumSetDirectory, fileName);
                 if (string.IsNullOrWhiteSpace(voice.DrumSet.Label))
                     voice.DrumSet.Label = Path.GetFileNameWithoutExtension(fileName);
-                var document = new AgbDrumSetDocument
+                string assetId = AgbSynthFormatContracts.NewAssetId();
+                var document = new DrumSetDocument
                 {
+                    AssetId = assetId,
                     VoiceGroupId = voiceGroup.Id,
-                    VoiceGroupPointer = voiceGroup.Pointer,
                     ParentVoiceIndex = voice.Index,
-                    SourcePointer = voice.DataPointer,
-                    SourceOffset = voice.DataOffset,
                     DrumSet = voice.DrumSet
                 };
                 File.WriteAllText(path, JsonSerializer.Serialize(document, context.Options));
                 context.DrumSetPathsByOffset.Add(sourceOffset, relativePath);
+                context.DrumSetAssetIdsByOffset.Add(sourceOffset, assetId);
+                voice.DataAssetId = assetId;
                 context.ExportedFileCount++;
             }
 
             voice.DataFilePath = relativePath;
+            if (context.DrumSetAssetIdsByOffset.TryGetValue(sourceOffset, out string? drumAssetId))
+                voice.DataAssetId = drumAssetId;
             return;
         }
 
@@ -134,21 +142,24 @@ public static class AgbSynthProjectVoiceGroupExporter
                 string path = Path.Combine(context.KeySplitDirectory, fileName);
                 if (string.IsNullOrWhiteSpace(voice.KeySplit.Label))
                     voice.KeySplit.Label = Path.GetFileNameWithoutExtension(fileName);
-                var document = new AgbKeySplitDocument
+                string assetId = AgbSynthFormatContracts.NewAssetId();
+                var document = new KeySplitDocument
                 {
+                    AssetId = assetId,
                     VoiceGroupId = voiceGroup.Id,
-                    VoiceGroupPointer = voiceGroup.Pointer,
                     ParentVoiceIndex = voice.Index,
-                    SourcePointer = voice.DataPointer,
-                    SourceOffset = voice.DataOffset,
                     KeySplit = voice.KeySplit
                 };
                 File.WriteAllText(path, JsonSerializer.Serialize(document, context.Options));
                 context.KeySplitPathsByOffset.Add(sourceOffset, relativePath);
+                context.KeySplitAssetIdsByOffset.Add(sourceOffset, assetId);
+                voice.DataAssetId = assetId;
                 context.ExportedFileCount++;
             }
 
             voice.DataFilePath = relativePath;
+            if (context.KeySplitAssetIdsByOffset.TryGetValue(sourceOffset, out string? keySplitAssetId))
+                voice.DataAssetId = keySplitAssetId;
         }
     }
 
@@ -167,9 +178,10 @@ public static class AgbSynthProjectVoiceGroupExporter
             relativePath = $"{context.RelativeWaveDataDirectory}/{fileName}";
             sample.FilePath = relativePath;
             string path = Path.Combine(context.WaveDataDirectory, fileName);
-            var document = new AgbWaveDataDocument
+            string assetId = AgbSynthFormatContracts.NewAssetId();
+            var document = new WaveDataDocument
             {
-                SourceOffset = sample.HeaderOffset,
+                AssetId = assetId,
                 Header = sample,
                 DataHex = Convert.ToHexString(context.Rom.Slice(sample.DataOffset, (int)sample.Size))
             };
@@ -177,6 +189,7 @@ public static class AgbSynthProjectVoiceGroupExporter
             context.WaveDataPathsByOffset.Add(sample.HeaderOffset, relativePath);
             context.WaveData.Add(new WaveDataProjectInfo
             {
+                AssetId = assetId,
                 Id = context.NextWaveDataId - 1,
                 FilePath = relativePath,
                 DataFormat = document.DataFormat,
@@ -193,6 +206,8 @@ public static class AgbSynthProjectVoiceGroupExporter
 
         sample.FilePath = relativePath;
         voice.DataFilePath = relativePath;
+        WaveDataProjectInfo? waveAsset = context.WaveData.FirstOrDefault(value => string.Equals(value.FilePath, relativePath, StringComparison.OrdinalIgnoreCase));
+        voice.DataAssetId = waveAsset?.AssetId ?? string.Empty;
     }
 
     private static void ExportWaveMemory(ExportContext context, VoiceProjectInfo voice)
@@ -208,9 +223,16 @@ public static class AgbSynthProjectVoiceGroupExporter
             relativePath = $"{context.RelativeWaveMemoryDirectory}/{fileName}";
             string path = Path.Combine(context.WaveMemoryDirectory, fileName);
             File.WriteAllBytes(path, context.Rom.Slice(waveMemory.DataOffset, 16).ToArray());
+            string assetId = AgbSynthFormatContracts.NewAssetId();
+            File.WriteAllText($"{path}.meta.json", JsonSerializer.Serialize(new WaveMemoryMetadataDocument
+            {
+                AssetId = assetId,
+                Label = Path.GetFileNameWithoutExtension(fileName)
+            }, context.Options));
             context.WaveMemoryPathsByOffset.Add(waveMemory.DataOffset, relativePath);
             context.WaveMemory.Add(new WaveMemoryProjectInfo
             {
+                AssetId = assetId,
                 Id = context.NextWaveMemoryId - 1,
                 FilePath = relativePath,
                 DataOffset = waveMemory.DataOffset,
@@ -221,6 +243,8 @@ public static class AgbSynthProjectVoiceGroupExporter
 
         waveMemory.FilePath = relativePath;
         voice.DataFilePath = relativePath;
+        WaveMemoryProjectInfo? asset = context.WaveMemory.FirstOrDefault(value => string.Equals(value.FilePath, relativePath, StringComparison.OrdinalIgnoreCase));
+        voice.DataAssetId = asset?.AssetId ?? string.Empty;
     }
 
     private static void LinkSongHeaders(AgbSynthProjectFile project, VoiceGroupProjectInfo voiceGroup)
@@ -232,6 +256,7 @@ public static class AgbSynthProjectVoiceGroupExporter
 
             header.VoiceGroupId = voiceGroup.Id;
             header.VoiceGroupFilePath = voiceGroup.FilePath;
+            header.VoiceGroupAssetId = voiceGroup.AssetId;
         }
     }
 
@@ -274,7 +299,9 @@ public static class AgbSynthProjectVoiceGroupExporter
         public List<WaveDataProjectInfo> WaveData { get; } = new();
         public List<WaveMemoryProjectInfo> WaveMemory { get; } = new();
         public Dictionary<int, string> DrumSetPathsByOffset { get; } = new();
+        public Dictionary<int, string> DrumSetAssetIdsByOffset { get; } = new();
         public Dictionary<int, string> KeySplitPathsByOffset { get; } = new();
+        public Dictionary<int, string> KeySplitAssetIdsByOffset { get; } = new();
         public Dictionary<int, string> WaveDataPathsByOffset { get; } = new();
         public Dictionary<int, string> WaveMemoryPathsByOffset { get; } = new();
         public int NextDrumSetId { get; set; }
@@ -284,63 +311,4 @@ public static class AgbSynthProjectVoiceGroupExporter
         public int ExportedFileCount { get; set; }
     }
 
-    private sealed class AgbVoiceGroupDocument
-    {
-        public string Format { get; set; } = "AgbSynthVoiceGroup";
-        public int Version { get; set; } = 1;
-        public string Engine { get; set; } = "MP2K";
-        public int Id { get; set; }
-        public string Label { get; set; } = string.Empty;
-        [JsonIgnore]
-        public string Pointer { get; set; } = string.Empty;
-        [JsonIgnore]
-        public int Offset { get; set; }
-        public string DiscoverySource { get; set; } = "Referenced";
-        public List<int> UsedBySongIds { get; set; } = new();
-        public List<VoiceProjectInfo> Voices { get; set; } = new();
-    }
-
-    private sealed class AgbDrumSetDocument
-    {
-        public string Format { get; set; } = "AgbSynthDrumSet";
-        public int Version { get; set; } = 1;
-        public string Engine { get; set; } = "MP2K";
-        public int VoiceGroupId { get; set; }
-        [JsonIgnore]
-        public string VoiceGroupPointer { get; set; } = string.Empty;
-        public int ParentVoiceIndex { get; set; }
-        [JsonIgnore]
-        public string SourcePointer { get; set; } = string.Empty;
-        [JsonIgnore]
-        public int? SourceOffset { get; set; }
-        public DrumSetProjectInfo DrumSet { get; set; } = new();
-    }
-
-    private sealed class AgbKeySplitDocument
-    {
-        public string Format { get; set; } = "AgbSynthKeySplit";
-        public int Version { get; set; } = 1;
-        public string Engine { get; set; } = "MP2K";
-        public int VoiceGroupId { get; set; }
-        [JsonIgnore]
-        public string VoiceGroupPointer { get; set; } = string.Empty;
-        public int ParentVoiceIndex { get; set; }
-        [JsonIgnore]
-        public string SourcePointer { get; set; } = string.Empty;
-        [JsonIgnore]
-        public int? SourceOffset { get; set; }
-        public KeySplitProjectInfo KeySplit { get; set; } = new();
-    }
-
-    private sealed class AgbWaveDataDocument
-    {
-        public string Format { get; set; } = "AgbSynthWaveData";
-        public int Version { get; set; } = 1;
-        public string Engine { get; set; } = "MP2K";
-        [JsonIgnore]
-        public int SourceOffset { get; set; }
-        public SampleHeaderProjectInfo Header { get; set; } = new();
-        public string DataFormat { get; set; } = "Signed8MonoPcm";
-        public string DataHex { get; set; } = string.Empty;
-    }
 }

@@ -131,14 +131,22 @@ public sealed partial class MainWindowViewModel
         _currentProject.SongHeaders = Sequences.Select(row =>
         {
             SongHeaderProjectInfo header = row.ToProjectInfo();
-            header.VoiceGroupId = VoiceGroupOptions.FirstOrDefault(option =>
-                AssetPathMatches(option.FilePath, header.VoiceGroupFilePath))?.Id;
+            VoiceGroupOption? voiceGroup = VoiceGroupOptions.FirstOrDefault(option =>
+                AssetPathMatches(option.FilePath, header.VoiceGroupFilePath));
+            header.VoiceGroupId = voiceGroup?.Id;
+            header.VoiceGroupAssetId = voiceGroup?.AssetId ?? string.Empty;
             return header;
         }).ToList();
+        foreach (SongTableEntryProjectInfo song in _currentProject.Songs)
+        {
+            song.SongHeaderAssetId = _currentProject.SongHeaders.FirstOrDefault(header =>
+                AssetPathMatches(header.FilePath, song.SongHeaderFilePath))?.AssetId ?? string.Empty;
+        }
 
         _currentProject.VoiceGroups = VoiceGroupOptions.Select(option =>
         {
             VoiceGroupProjectInfo source = option.Source ?? new VoiceGroupProjectInfo();
+            source.AssetId = option.AssetId;
             source.Id = option.Id;
             source.Label = option.Label;
             source.FilePath = option.FilePath;
@@ -148,6 +156,7 @@ public sealed partial class MainWindowViewModel
 
         _currentProject.KeySplits = KeySplitOptions.Select(option => new KeySplitAssetProjectInfo
         {
+            AssetId = option.AssetId,
             Id = option.Id,
             Label = option.Label,
             FilePath = option.FilePath,
@@ -158,6 +167,7 @@ public sealed partial class MainWindowViewModel
 
         _currentProject.DrumSets = DrumSetOptions.Select(option => new DrumSetAssetProjectInfo
         {
+            AssetId = option.AssetId,
             Id = option.Id,
             Label = option.Label,
             FilePath = option.FilePath,
@@ -168,6 +178,7 @@ public sealed partial class MainWindowViewModel
 
         _currentProject.WaveMemory = WaveMemoryRows.Select(row => new WaveMemoryProjectInfo
         {
+            AssetId = row.AssetId,
             Id = row.Id,
             FilePath = row.FilePath,
             DataFormat = row.DataFormat,
@@ -179,6 +190,7 @@ public sealed partial class MainWindowViewModel
             SampleHeaderProjectInfo header = row.ToSampleHeader();
             return new WaveDataProjectInfo
             {
+                AssetId = row.AssetId,
                 Id = row.Id,
                 FilePath = row.FilePath,
                 DataFormat = row.DataFormat,
@@ -191,6 +203,26 @@ public sealed partial class MainWindowViewModel
                 DataOffset = header.DataOffset
             };
         }).ToList();
+
+        var dataIdsByPath = _currentProject.KeySplits.Select(value => (value.FilePath, value.AssetId))
+            .Concat(_currentProject.DrumSets.Select(value => (value.FilePath, value.AssetId)))
+            .Concat(_currentProject.WaveData.Select(value => (value.FilePath, value.AssetId)))
+            .Concat(_currentProject.WaveMemory.Select(value => (value.FilePath, value.AssetId)))
+            .Where(value => !string.IsNullOrWhiteSpace(value.FilePath))
+            .ToDictionary(value => value.FilePath, value => value.AssetId, StringComparer.OrdinalIgnoreCase);
+        foreach (VoiceProjectInfo voice in _currentProject.VoiceGroups.SelectMany(value => value.Voices))
+            AssignVoiceDataAssetId(voice, dataIdsByPath);
+    }
+
+    private static void AssignVoiceDataAssetId(VoiceProjectInfo voice, IReadOnlyDictionary<string, string> idsByPath)
+    {
+        voice.DataAssetId = idsByPath.TryGetValue(voice.DataFilePath, out string? assetId) ? assetId : string.Empty;
+        if (voice.KeySplit is not null)
+            foreach (VoiceProjectInfo child in voice.KeySplit.Regions)
+                AssignVoiceDataAssetId(child, idsByPath);
+        if (voice.DrumSet is not null)
+            foreach (VoiceProjectInfo child in voice.DrumSet.Entries)
+                AssignVoiceDataAssetId(child, idsByPath);
     }
 
     private HashSet<string> GetCurrentManagedFiles()

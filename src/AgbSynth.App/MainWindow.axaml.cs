@@ -154,7 +154,8 @@ public partial class MainWindow : Window
                 ReadMode = addressWindow.ReadMode,
                 SongTableOffset = addressWindow.SongTableOffset,
                 SongTableAddressText = addressWindow.SongTableAddressText ?? string.Empty,
-                IncludeUnreferencedVoiceGroups = addressWindow.IncludeUnreferencedVoiceGroups
+                IncludeUnreferencedVoiceGroups = addressWindow.IncludeUnreferencedVoiceGroups,
+                SequenceExportMode = addressWindow.SequenceExportMode
             });
     }
 
@@ -726,11 +727,13 @@ public partial class MainWindow : Window
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
             AllowMultiple = false,
-            Title = "Select MIDI",
+            Title = "Select Sequence",
             SuggestedStartLocation = startLocation,
             FileTypeFilter = new List<FilePickerFileType>
             {
+                new("Sequence (*.mid;*.s)") { Patterns = new[] { "*.mid", "*.midi", "*.s" } },
                 new("MIDI (*.mid)") { Patterns = new[] { "*.mid", "*.midi" } },
+                new("Midi2agb source (*.s)") { Patterns = new[] { "*.s" } },
                 FilePickerFileTypes.All
             }
         });

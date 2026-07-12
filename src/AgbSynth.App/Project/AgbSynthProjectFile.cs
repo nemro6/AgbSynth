@@ -5,9 +5,9 @@ namespace AgbSynth.App.Project;
 
 public sealed class AgbSynthProjectFile
 {
-    public string Format { get; set; } = "AgbSynthProject";
-    public int Version { get; set; } = 3;
-    public string Engine { get; set; } = "MP2K";
+    public string Format { get; set; } = AgbSynthFormatContracts.ProjectFormat;
+    public int Version { get; set; } = AgbSynthFormatContracts.ProjectVersion;
+    public string Engine { get; set; } = AgbSynthFormatContracts.Engine;
     public ImportProjectInfo Import { get; set; } = new();
     public RomProjectInfo Rom { get; set; } = new();
     public Mp2kSoundModeProjectInfo SoundMode { get; set; } = new();
@@ -33,6 +33,12 @@ public sealed class AgbSynthProjectFile
 
     [JsonIgnore]
     public List<WaveMemoryProjectInfo> WaveMemory { get; set; } = new();
+
+    [JsonIgnore]
+    public bool IsReadOnly { get; set; }
+
+    [JsonIgnore]
+    public List<ProjectDiagnostic> Diagnostics { get; set; } = new();
 }
 
 public sealed class Mp2kSoundModeProjectInfo
@@ -57,6 +63,7 @@ public sealed class ImportProjectInfo
 {
     public string ReadMode { get; set; } = nameof(Mp2kRomReadMode.ManualSongTableAddress);
     public bool IncludeUnreferencedVoiceGroups { get; set; }
+    public SequenceExportMode SequenceExportMode { get; set; } = SequenceExportMode.Midi;
 }
 
 public sealed class RomProjectInfo
@@ -71,6 +78,7 @@ public sealed class RomProjectInfo
 
 public sealed class SongTableProjectInfo
 {
+    public string AssetId { get; set; } = string.Empty;
     public string FilePath { get; set; } = string.Empty;
     [JsonIgnore]
     public string Address { get; set; } = string.Empty;
@@ -91,6 +99,7 @@ public sealed class SongTableEntryProjectInfo
     [JsonIgnore]
     public int HeaderOffset { get; set; }
     public string SongHeaderFilePath { get; set; } = string.Empty;
+    public string SongHeaderAssetId { get; set; } = string.Empty;
     public int Group1 { get; set; }
     public int Group2 { get; set; }
     public string Note { get; set; } = string.Empty;
@@ -99,6 +108,7 @@ public sealed class SongTableEntryProjectInfo
 
 public sealed class SongHeaderProjectInfo
 {
+    public string AssetId { get; set; } = string.Empty;
     public int SongId { get; set; }
     public string Label { get; set; } = string.Empty;
     public string FilePath { get; set; } = string.Empty;
@@ -114,11 +124,15 @@ public sealed class SongHeaderProjectInfo
     public int VoiceGroupOffset { get; set; }
     public int? VoiceGroupId { get; set; }
     public string VoiceGroupFilePath { get; set; } = string.Empty;
+    public string VoiceGroupAssetId { get; set; } = string.Empty;
     [JsonIgnore]
     public List<string> TrackPointers { get; set; } = new();
     [JsonIgnore]
     public List<int> TrackOffsets { get; set; } = new();
     public string MidiFilePath { get; set; } = string.Empty;
+    public string Midi2AgbFilePath { get; set; } = string.Empty;
+    public SequenceAssetFormat SequenceFormat { get; set; } = SequenceAssetFormat.Midi;
+    public string SequenceFilePath { get; set; } = string.Empty;
     public string Note { get; set; } = string.Empty;
     [JsonIgnore]
     public string RawHeaderHex { get; set; } = string.Empty;
@@ -126,6 +140,7 @@ public sealed class SongHeaderProjectInfo
 
 public sealed class VoiceGroupProjectInfo
 {
+    public string AssetId { get; set; } = string.Empty;
     public int Id { get; set; }
     public string Label { get; set; } = string.Empty;
     [JsonIgnore]
@@ -152,6 +167,7 @@ public sealed class VoiceProjectInfo
     [JsonIgnore]
     public int? DataOffset { get; set; }
     public string DataFilePath { get; set; } = string.Empty;
+    public string DataAssetId { get; set; } = string.Empty;
     public int Attack { get; set; }
     public int Decay { get; set; }
     public int Sustain { get; set; }
@@ -205,6 +221,7 @@ public sealed class SampleHeaderProjectInfo
 
 public sealed class WaveDataProjectInfo
 {
+    public string AssetId { get; set; } = string.Empty;
     public int Id { get; set; }
     public string FilePath { get; set; } = string.Empty;
     public string DataFormat { get; set; } = "Signed8MonoPcm";
@@ -221,6 +238,7 @@ public sealed class WaveDataProjectInfo
 
 public sealed class WaveMemoryProjectInfo
 {
+    public string AssetId { get; set; } = string.Empty;
     public int Id { get; set; }
     public string FilePath { get; set; } = string.Empty;
     public string DataFormat { get; set; } = "Mp2kPcm4WaveRam";
@@ -231,6 +249,7 @@ public sealed class WaveMemoryProjectInfo
 
 public sealed class KeySplitAssetProjectInfo
 {
+    public string AssetId { get; set; } = string.Empty;
     public int Id { get; set; }
     public string Label { get; set; } = string.Empty;
     public string FilePath { get; set; } = string.Empty;
@@ -241,6 +260,7 @@ public sealed class KeySplitAssetProjectInfo
 
 public sealed class DrumSetAssetProjectInfo
 {
+    public string AssetId { get; set; } = string.Empty;
     public int Id { get; set; }
     public string Label { get; set; } = string.Empty;
     public string FilePath { get; set; } = string.Empty;

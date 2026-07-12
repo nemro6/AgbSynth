@@ -21,6 +21,7 @@ public partial class SongTableAddressWindow : Window
         InitializeComponent();
         _romLength = romLength;
         ReadModeComboBox.SelectedIndex = 0;
+        SequenceFormatComboBox.SelectedIndex = 0;
         AddressTextBox.KeyDown += OnAddressKeyDown;
     }
 
@@ -28,6 +29,7 @@ public partial class SongTableAddressWindow : Window
     public string? SongTableAddressText { get; private set; }
     public Mp2kRomReadMode ReadMode { get; private set; } = Mp2kRomReadMode.ManualSongTableAddress;
     public bool IncludeUnreferencedVoiceGroups { get; private set; }
+    public SequenceExportMode SequenceExportMode { get; private set; } = SequenceExportMode.Midi;
 
     private void OnAddressKeyDown(object? sender, KeyEventArgs e)
     {
@@ -61,6 +63,12 @@ public partial class SongTableAddressWindow : Window
             ? Mp2kRomReadMode.AutomaticDiscovery
             : Mp2kRomReadMode.ManualSongTableAddress;
         IncludeUnreferencedVoiceGroups = IncludeUnreferencedCheckBox.IsChecked == true;
+        SequenceExportMode = SequenceFormatComboBox.SelectedIndex switch
+        {
+            1 => SequenceExportMode.Midi2Agb,
+            2 => SequenceExportMode.Both,
+            _ => SequenceExportMode.Midi
+        };
 
         if (ReadMode == Mp2kRomReadMode.AutomaticDiscovery)
         {

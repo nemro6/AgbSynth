@@ -29,6 +29,7 @@ public sealed class WaveDataRow : INotifyPropertyChanged, INotifyPropertyChangin
     private bool _isPointerOver;
 
     public int Id { get; init; }
+    public string AssetId { get; init; } = string.Empty;
     public string IdText => Id.ToString("D3");
     public string FilePath { get; init; } = string.Empty;
     public string ProjectDirectory { get; init; } = string.Empty;
@@ -160,6 +161,7 @@ public sealed class WaveDataRow : INotifyPropertyChanged, INotifyPropertyChangin
         var row = new WaveDataRow
         {
             Id = waveData.Id,
+            AssetId = waveData.AssetId,
             FilePath = waveData.FilePath,
             ProjectDirectory = projectDirectory,
             DataFormat = string.IsNullOrWhiteSpace(waveData.DataFormat) ? "Signed8MonoPcm" : waveData.DataFormat,
@@ -180,6 +182,7 @@ public sealed class WaveDataRow : INotifyPropertyChanged, INotifyPropertyChangin
         var row = new WaveDataRow
         {
             Id = id,
+            AssetId = AgbSynthFormatContracts.NewAssetId(),
             FilePath = filePath,
             ProjectDirectory = projectDirectory,
             DataFormat = "Signed8MonoPcm",
@@ -201,6 +204,7 @@ public sealed class WaveDataRow : INotifyPropertyChanged, INotifyPropertyChangin
         var row = new WaveDataRow
         {
             Id = id,
+            AssetId = AgbSynthFormatContracts.NewAssetId(),
             FilePath = filePath,
             ProjectDirectory = ProjectDirectory,
             DataFormat = DataFormat,
@@ -226,7 +230,7 @@ public sealed class WaveDataRow : INotifyPropertyChanged, INotifyPropertyChangin
 
         try
         {
-            var document = JsonSerializer.Deserialize<WaveDataAssetDocument>(File.ReadAllText(path), AssetJsonOptions);
+            var document = JsonSerializer.Deserialize<WaveDataDocument>(File.ReadAllText(path), AssetJsonOptions);
             if (document?.Header is not null)
             {
                 DataFormat = string.IsNullOrWhiteSpace(document.DataFormat) ? "Signed8MonoPcm" : document.DataFormat;
@@ -306,8 +310,9 @@ public sealed class WaveDataRow : INotifyPropertyChanged, INotifyPropertyChangin
 
     public byte[] CreateAssetBytes()
     {
-        var document = new WaveDataAssetDocument
+        var document = new WaveDataDocument
         {
+            AssetId = AssetId,
             Header = ToSampleHeader(),
             DataFormat = DataFormat,
             DataHex = Convert.ToHexString(DataBytes),
@@ -386,15 +391,4 @@ public sealed class WaveDataRow : INotifyPropertyChanged, INotifyPropertyChangin
         return true;
     }
 
-    private sealed class WaveDataAssetDocument
-    {
-        public string Format { get; set; } = "AgbSynthWaveData";
-        public int Version { get; set; } = 1;
-        public string Engine { get; set; } = "MP2K";
-        public SampleHeaderProjectInfo Header { get; set; } = new();
-        public string DataFormat { get; set; } = "Signed8MonoPcm";
-        public string DataHex { get; set; } = string.Empty;
-        public string Label { get; set; } = string.Empty;
-        public string Note { get; set; } = string.Empty;
-    }
 }
