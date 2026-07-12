@@ -226,6 +226,45 @@ public sealed class Mp2kMidiPlaybackSession
                 }
             }
         }
+
+        AttachLegacyConductorTempos(events);
+    }
+
+    private void AttachLegacyConductorTempos(IReadOnlyList<MidiPlaybackEvent> events)
+    {
+        // Older AgbSynth exports moved every MP2K TEMPO command to the conductor
+        // track. That preserved the first pass but lost the command's track loop.
+        // New exports also retain a source-track copy, so only repair unmatched
+        // conductor events here.
+        var sourceTempoKeys = events
+            .Where(midiEvent => midiEvent.TrackIndex > 0 && midiEvent.Kind == MidiPlaybackEventKind.Tempo)
+            .Select(midiEvent => (midiEvent.Tick, midiEvent.Data3))
+            .ToHashSet();
+
+        foreach (MidiPlaybackEvent tempo in events.Where(midiEvent =>
+                     midiEvent.TrackIndex == 0 &&
+                     midiEvent.Kind == MidiPlaybackEventKind.Tempo &&
+                     !sourceTempoKeys.Contains((midiEvent.Tick, midiEvent.Data3))))
+        {
+            TrackLoopDefinition? target = _loops.Values
+                .Where(loop => tempo.Tick >= loop.StartTick && tempo.Tick < loop.EndTick)
+                .OrderBy(loop => loop.TrackIndex)
+                .FirstOrDefault();
+            if (target is null || target.BodyEvents.Any(midiEvent =>
+                    midiEvent.Kind == MidiPlaybackEventKind.Tempo &&
+                    midiEvent.Tick == tempo.Tick &&
+                    midiEvent.Data3 == tempo.Data3))
+            {
+                continue;
+            }
+
+            MidiPlaybackEvent[] body = target.BodyEvents
+                .Append(tempo)
+                .OrderBy(midiEvent => midiEvent.Tick)
+                .ThenBy(midiEvent => midiEvent.Order)
+                .ToArray();
+            _loops[target.TrackIndex] = target with { BodyEvents = body };
+        }
     }
 
     private void Enqueue(ScheduledMidiOccurrence occurrence)

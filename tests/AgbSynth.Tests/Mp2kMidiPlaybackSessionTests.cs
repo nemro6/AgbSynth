@@ -141,6 +141,37 @@ public sealed class Mp2kMidiPlaybackSessionTests
     }
 
     [Fact]
+    public void AdvanceVBlank_LegacyConductorTempoRepeatsWithTrackLoop()
+    {
+        const int loopStart = 89;
+        const int loopEnd = 90;
+        int tempoEvents = 0;
+        var midi = new MidiPlaybackFile(
+            48,
+            [
+                Tempo(tick: 1, order: 0, bpm: 50),
+                Control(tick: 1, order: 1, track: 1, loopStart),
+                NoteOn(tick: 1, order: 2, note: 60, track: 1),
+                Control(tick: 3, order: 3, track: 1, loopEnd)
+            ]);
+        var session = new Mp2kMidiPlaybackSession(
+            midi,
+            loopStart,
+            loopEnd,
+            midiEvent =>
+            {
+                if (midiEvent.Kind == MidiPlaybackEventKind.Tempo)
+                    tempoEvents++;
+            });
+
+        while (session.NextTick <= 3)
+            session.AdvanceVBlank();
+
+        Assert.Equal(2, tempoEvents);
+        Assert.Equal(100, session.TempoIncrement);
+    }
+
+    [Fact]
     public void AdvanceVBlank_PauseDoesNotConsumeTempoOrTicks()
     {
         var session = CreateSession(
