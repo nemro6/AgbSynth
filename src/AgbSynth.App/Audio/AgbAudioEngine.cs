@@ -1994,7 +1994,7 @@ public sealed class AgbAudioEngine : ISampleProvider, IDisposable
                 _velocity = _sustainVelocity;
                 _processStep = 0;
                 ConfigurePsgHardwareEnvelope(_velocity, period: 0, increase: true);
-                if (_velocity == 0)
+                if (_velocity == 0 && _sustain == 0)
                     Stop();
                 else
                     _state = EnvelopeState.Playing;
@@ -2005,12 +2005,6 @@ public sealed class AgbAudioEngine : ISampleProvider, IDisposable
                 case EnvelopeState.Initializing:
                     _processStep = 0;
                     _velocity = 0;
-                    if (_peakVelocity == 0)
-                    {
-                        Stop();
-                        return;
-                    }
-
                     if (_attack > 0)
                     {
                         _state = EnvelopeState.Rising;

@@ -627,6 +627,31 @@ public sealed class AgbAudioEngineTests
     }
 
     [Fact]
+    public void SetVoiceVolume_RevivesNoiseStartedAtZeroTrackVolume()
+    {
+        using var engine = new AgbAudioEngine();
+        float[] silent = new float[4096];
+        float[] audible = new float[4096];
+
+        int voiceId = engine.NoteOnNoise(
+            control: 0x23,
+            baseKey: 60,
+            midiNote: 60,
+            velocity: 127,
+            volume: 0,
+            pan: 64,
+            priority: 64);
+        Assert.True(voiceId >= 0);
+        engine.Read(silent, 0, silent.Length);
+
+        engine.SetVoiceVolume(voiceId, 127);
+        engine.Read(audible, 0, audible.Length);
+
+        Assert.Equal(0f, GetChannelPeak(silent, channel: 0));
+        Assert.True(GetChannelPeak(audible, channel: 0) > 0.05f);
+    }
+
+    [Fact]
     public void NoteOnSquare_AppliesVolumeLfo()
     {
         using var engine = new AgbAudioEngine();

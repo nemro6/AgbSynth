@@ -103,6 +103,7 @@ public sealed class ProjectFormatAndSequenceTests
             loop_point:
                 .byte XCMD, 0x04, 200
                 .byte MEMACC, 0, 0, 0
+                .byte W24
                 .byte GOTO
                 .word loop_point
             pattern_a:
@@ -121,8 +122,10 @@ public sealed class ProjectFormatAndSequenceTests
         Assert.Contains(midi.Events, value => value.Kind == MidiPlaybackEventKind.Tempo && value.Data3 == 60_000_000 / 90);
         Assert.Equal(3, midi.Events.Count(value => value.Kind == MidiPlaybackEventKind.NoteOn));
         Assert.Contains(midi.Events, value => value.Kind == MidiPlaybackEventKind.ControlChange && value.Data1 == MidiCcMapping.Default.Attack && value.Data2 == 127);
-        Assert.Contains(midi.Events, value => value.Kind == MidiPlaybackEventKind.ControlChange && value.Data1 == MidiCcMapping.Default.LoopStart);
-        Assert.Contains(midi.Events, value => value.Kind == MidiPlaybackEventKind.ControlChange && value.Data1 == MidiCcMapping.Default.LoopEnd);
+        MidiPlaybackEvent loopStart = Assert.Single(midi.Events, value => value.Kind == MidiPlaybackEventKind.ControlChange && value.Data1 == MidiCcMapping.Default.LoopStart);
+        MidiPlaybackEvent loopEnd = Assert.Single(midi.Events, value => value.Kind == MidiPlaybackEventKind.ControlChange && value.Data1 == MidiCcMapping.Default.LoopEnd);
+        Assert.Equal(48, loopStart.Tick);
+        Assert.Equal(72, loopEnd.Tick);
         Assert.Contains(report.Issues, value => value.Code == "MEMACC_PLAYBACK_ONLY");
     }
 

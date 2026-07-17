@@ -246,6 +246,7 @@ public static partial class Midi2AgbSequenceCodec
         int eventOrder = order;
         int? loopStartTick = null;
         var calls = new Stack<(int Return, int Target, int Remaining)>();
+        var executedTicks = new Dictionary<int, int>();
         var activeTies = new HashSet<int>();
         bool allowTrackBoundary = false;
         int budget = MaxCommandsPerTrack;
@@ -263,7 +264,9 @@ public static partial class Midi2AgbSequenceCodec
             {
                 allowTrackBoundary = false;
             }
+            int statementPosition = position;
             Statement statement = parsed.Statements[position++];
+            executedTicks[statementPosition] = tick;
             if (statement.Kind != StatementKind.Bytes || statement.Values.Count == 0)
                 continue;
             string command = NormalizeCommand(statement.Values[0]);
@@ -318,7 +321,9 @@ public static partial class Midi2AgbSequenceCodec
                 case "GOTO":
                     if (TryReadTarget(parsed, args, ref position, out int targetPosition))
                     {
-                        loopStartTick ??= FindApproximateLoopTick(parsed, start, targetPosition);
+                        loopStartTick ??= executedTicks.TryGetValue(targetPosition, out int executedTick)
+                            ? executedTick
+                            : FindApproximateLoopTick(parsed, start, targetPosition);
                         output.Add(new MidiPlaybackEvent(loopStartTick.Value, eventOrder++, trackIndex, MidiPlaybackEventKind.ControlChange, channel, mapping.LoopStart, 127, 0));
                         output.Add(new MidiPlaybackEvent(tick, eventOrder++, trackIndex, MidiPlaybackEventKind.ControlChange, channel, mapping.LoopEnd, 127, 0));
                     }
