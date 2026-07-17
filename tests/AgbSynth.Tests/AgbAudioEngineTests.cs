@@ -1524,6 +1524,29 @@ public sealed class AgbAudioEngineTests
     }
 
     [Fact]
+    public void NoteOnNoise_StartsSilentUntilTheFirstHardwareLfsrClock()
+    {
+        using var engine = new AgbAudioEngine(outputDeviceNumber: int.MaxValue);
+        float[] beforeFirstClock = new float[2048 * 2];
+        float[] afterFirstClock = new float[8192 * 2];
+
+        Assert.True(engine.NoteOnNoise(
+            control: 0,
+            baseKey: 60,
+            midiNote: 21,
+            velocity: 127,
+            volume: 127,
+            pan: 64,
+            priority: 64) >= 0);
+
+        engine.Read(beforeFirstClock, 0, beforeFirstClock.Length);
+        engine.Read(afterFirstClock, 0, afterFirstClock.Length);
+
+        Assert.Equal(0f, GetChannelPeak(beforeFirstClock, channel: 0));
+        Assert.True(GetChannelPeak(afterFirstClock, channel: 0) > 0.05f);
+    }
+
+    [Fact]
     public void SetVoicePitchOffset_UpdatesActiveNoiseClock()
     {
         float lowPitchChangeRate = CountNoiseLevelTransitions(RenderNoiseWithPitchOffset(-12));

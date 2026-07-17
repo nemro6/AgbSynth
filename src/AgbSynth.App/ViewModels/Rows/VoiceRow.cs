@@ -189,7 +189,7 @@ public sealed class VoiceRow : INotifyPropertyChanged, INotifyPropertyChanging, 
     }
     public VoiceDataOption? SelectedNoiseKindOption
     {
-        get => NoiseFormatOptions[Source?.PsgNoise?.PinkNoise == true ? 1 : 0];
+        get => NoiseFormatOptions[(_noiseControl & 0x08) != 0 ? 1 : 0];
         set
         {
             if (value is null || Source is null)
@@ -201,9 +201,18 @@ public sealed class VoiceRow : INotifyPropertyChanged, INotifyPropertyChanging, 
 
             OnPropertyChanging(nameof(SelectedNoiseKindOption));
             Source.PsgNoise ??= new PsgNoiseProjectInfo();
-            Source.PsgNoise.PinkNoise = value.Value == 1;
+            bool useShortLfsr = value.Value == 1;
+            _noiseControl = useShortLfsr ? _noiseControl | 0x08 : _noiseControl & ~0x08;
+            Source.PsgNoise.Control = _noiseControl;
+            Source.PsgNoise.ClockDivider = _noiseControl & 0x07;
+            Source.PsgNoise.ShortLfsr = useShortLfsr;
+            Source.PsgNoise.PrescalerShift = (_noiseControl >> 4) & 0x0F;
+            Source.PsgNoise.PinkNoise = useShortLfsr;
+            Source.DataPointer = $"0x{_noiseControl:X8}";
+            DataPointer = Source.DataPointer;
             OnPropertyChanged(nameof(SelectedNoiseKindOption));
             OnPropertyChanged(nameof(SelectedFormatOption));
+            OnPropertyChanged(nameof(SelectedNoiseControlOption));
             OnPropertyChanged(nameof(DataDisplay));
         }
     }
@@ -463,10 +472,13 @@ public sealed class VoiceRow : INotifyPropertyChanged, INotifyPropertyChanging, 
                 Source.PsgNoise.ClockDivider = _noiseControl & 0x07;
                 Source.PsgNoise.ShortLfsr = (_noiseControl & 0x08) != 0;
                 Source.PsgNoise.PrescalerShift = (_noiseControl >> 4) & 0x0F;
+                Source.PsgNoise.PinkNoise = Source.PsgNoise.ShortLfsr;
                 Source.DataPointer = $"0x{_noiseControl:X8}";
             }
             DataPointer = $"0x{_noiseControl:X8}";
             OnPropertyChanged(nameof(SelectedNoiseControlOption));
+            OnPropertyChanged(nameof(SelectedNoiseKindOption));
+            OnPropertyChanged(nameof(SelectedFormatOption));
             OnPropertyChanged(nameof(DataDisplay));
         }
     }
@@ -686,9 +698,20 @@ public sealed class VoiceRow : INotifyPropertyChanged, INotifyPropertyChanging, 
         _squareDutyIndex = Math.Clamp(_squareDutyIndex, 0, 3);
         _noiseControl = Source?.PsgNoise?.Control ?? TryParseDataByte(DataPointer, fallback: 0);
         _noiseControl = Math.Clamp(_noiseControl, 0, 255);
+        if (Source?.PsgNoise is { } noise)
+        {
+            bool useShortLfsr = (_noiseControl & 0x08) != 0 || noise.ShortLfsr || noise.PinkNoise;
+            _noiseControl = useShortLfsr ? _noiseControl | 0x08 : _noiseControl & ~0x08;
+            noise.Control = _noiseControl;
+            noise.ClockDivider = _noiseControl & 0x07;
+            noise.ShortLfsr = useShortLfsr;
+            noise.PrescalerShift = (_noiseControl >> 4) & 0x0F;
+            noise.PinkNoise = useShortLfsr;
+        }
         OnPropertyChanged(nameof(SelectedSquareDutyOption));
         OnPropertyChanged(nameof(SquareDutyIndex));
         OnPropertyChanged(nameof(SelectedNoiseControlOption));
+        OnPropertyChanged(nameof(SelectedNoiseKindOption));
         OnPropertyChanged(nameof(DataDisplay));
         OnPropertyChanged(nameof(IsFileDataVisible));
         OnPropertyChanged(nameof(IsPsgSquareDataVisible));

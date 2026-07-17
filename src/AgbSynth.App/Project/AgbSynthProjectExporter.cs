@@ -430,7 +430,7 @@ public static class AgbSynthProjectExporter
             ClockDivider = control & 0x07,
             ShortLfsr = (control & 0x08) != 0,
             PrescalerShift = (control >> 4) & 0x0F,
-            PinkNoise = false
+            PinkNoise = (control & 0x08) != 0
         };
     }
 

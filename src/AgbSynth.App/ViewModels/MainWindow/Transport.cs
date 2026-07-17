@@ -17,7 +17,6 @@ public sealed partial class MainWindowViewModel
     private Mp2kMidiPlaybackSession? _midiPlaybackSession;
     private Mp2kSequenceAudioRuntime? _sequenceAudioRuntime;
     private long _lastSequenceSnapshotRevision;
-    private int _sequencePlaybackLastTick = 1;
     private bool _isSequencePlaying;
     private bool _isSequencePaused;
     private double _playbackProgress;
@@ -159,7 +158,6 @@ public sealed partial class MainWindowViewModel
         }
 
         Mp2kPreparedVoiceBank voiceBank = BuildSequenceVoiceBank(midi);
-        _sequencePlaybackLastTick = Math.Max(1, midi.Events[^1].Tick);
         _currentPlayerPriority = Math.Clamp(sequence.Priority, 0, 255);
         ApplySequenceReverb(sequence);
 
@@ -192,7 +190,6 @@ public sealed partial class MainWindowViewModel
             _midiPlaybackSession = null;
             _sequenceAudioRuntime = null;
             _lastSequenceSnapshotRevision = 0;
-            _sequencePlaybackLastTick = 1;
             _currentPlayerPriority = 0;
             if (_audioEngine is not null)
             {

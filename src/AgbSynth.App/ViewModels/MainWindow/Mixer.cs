@@ -84,7 +84,7 @@ public sealed partial class MainWindowViewModel
             return;
 
         PlaybackProgress = Math.Clamp(
-            session.LastEventSourceTick / (double)Math.Max(1, _sequencePlaybackLastTick) * 100.0,
+            session.SourcePositionTick / (double)Math.Max(1, session.SourceEndTick) * 100.0,
             0,
             100);
 

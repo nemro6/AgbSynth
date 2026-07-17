@@ -29,6 +29,9 @@ public sealed class Mp2kMidiPlaybackSession
     private long _processedStepCount;
     private long _vblankCount;
     private int _lastEventSourceTick;
+    private int _sourceEndTick;
+    private int _progressLoopStart = -1;
+    private int _progressLoopEnd = -1;
     private int _paused;
     private int _stopped;
     private int _completed;
@@ -67,6 +70,20 @@ public sealed class Mp2kMidiPlaybackSession
     public int TempoCounter => Volatile.Read(ref _tempoCounter);
     public int TempoIncrement => Volatile.Read(ref _tempoIncrement);
     public int LastEventSourceTick => Volatile.Read(ref _lastEventSourceTick);
+    public int SourceEndTick => Volatile.Read(ref _sourceEndTick);
+
+    public int SourcePositionTick
+    {
+        get
+        {
+            long absoluteTick = Math.Max(0, NextTick - 1);
+            int loopStart = Volatile.Read(ref _progressLoopStart);
+            int loopEnd = Volatile.Read(ref _progressLoopEnd);
+            if (loopStart >= 0 && loopEnd > loopStart && absoluteTick >= loopEnd)
+                return loopStart + (int)((absoluteTick - loopEnd) % (loopEnd - loopStart));
+            return (int)Math.Min(absoluteTick, int.MaxValue);
+        }
+    }
 
     /// <summary>
     /// Runs one MPlayMain update. The callback is invoked after each MP2K step so
@@ -168,6 +185,7 @@ public sealed class Mp2kMidiPlaybackSession
         int loopStartController,
         int loopEndController)
     {
+        _sourceEndTick = events.Count == 0 ? 0 : events.Max(midiEvent => midiEvent.Tick);
         foreach (IGrouping<int, MidiPlaybackEvent> trackGroup in events.GroupBy(midiEvent => midiEvent.TrackIndex))
         {
             MidiPlaybackEvent[] trackEvents = trackGroup
@@ -189,6 +207,11 @@ public sealed class Mp2kMidiPlaybackSession
 
             if (loopStart >= 0 && loopEnd > loopStart)
             {
+                MidiPlaybackEvent[] initialTailNoteOffs = trackEvents
+                    .Where(midiEvent =>
+                        midiEvent.Kind == MidiPlaybackEventKind.NoteOff &&
+                        midiEvent.Tick >= loopEnd)
+                    .ToArray();
                 var loop = new TrackLoopDefinition(
                     trackGroup.Key,
                     loopStart,
@@ -199,11 +222,7 @@ public sealed class Mp2kMidiPlaybackSession
                             midiEvent.Tick >= loopStart &&
                             midiEvent.Tick < loopEnd)
                         .ToArray(),
-                    trackEvents
-                        .Where(midiEvent =>
-                            midiEvent.Kind == MidiPlaybackEventKind.NoteOff &&
-                            midiEvent.Tick >= loopEnd)
-                        .ToArray());
+                    FindRepeatedTailNoteOffs(trackEvents, loopStart, loopEnd));
                 _loops[trackGroup.Key] = loop;
 
                 foreach (MidiPlaybackEvent midiEvent in trackEvents.Where(midiEvent =>
@@ -213,7 +232,7 @@ public sealed class Mp2kMidiPlaybackSession
                     Enqueue(new ScheduledMidiOccurrence(midiEvent.Tick, midiEvent, null, 0));
                 }
 
-                foreach (MidiPlaybackEvent midiEvent in loop.TailNoteOffs)
+                foreach (MidiPlaybackEvent midiEvent in initialTailNoteOffs)
                     Enqueue(new ScheduledMidiOccurrence(midiEvent.Tick, midiEvent, null, 0));
                 Enqueue(new ScheduledMidiOccurrence(loopEnd, null, loop.TrackIndex, 0));
             }
@@ -225,6 +244,13 @@ public sealed class Mp2kMidiPlaybackSession
                     Enqueue(new ScheduledMidiOccurrence(midiEvent.Tick, midiEvent, null, 0));
                 }
             }
+        }
+
+        if (_loops.Count > 0)
+        {
+            _progressLoopStart = _loops.Values.Min(loop => loop.StartTick);
+            _progressLoopEnd = _loops.Values.Max(loop => loop.EndTick);
+            _sourceEndTick = _progressLoopEnd;
         }
 
         AttachLegacyConductorTempos(events);
@@ -297,6 +323,43 @@ public sealed class Mp2kMidiPlaybackSession
 
     private static bool IsLoopMarker(MidiPlaybackEvent midiEvent, int startController, int endController) =>
         IsLoopStart(midiEvent, startController) || IsLoopEnd(midiEvent, endController);
+
+    private static IReadOnlyList<MidiPlaybackEvent> FindRepeatedTailNoteOffs(
+        IReadOnlyList<MidiPlaybackEvent> trackEvents,
+        int loopStart,
+        int loopEnd)
+    {
+        var pendingNotes = new Dictionary<(int Channel, int Note), Queue<MidiPlaybackEvent>>();
+        var repeatedTailNoteOffs = new List<MidiPlaybackEvent>();
+        foreach (MidiPlaybackEvent midiEvent in trackEvents)
+        {
+            var key = (midiEvent.Channel, midiEvent.Data1);
+            if (midiEvent.Kind == MidiPlaybackEventKind.NoteOn && midiEvent.Data2 > 0)
+            {
+                if (!pendingNotes.TryGetValue(key, out Queue<MidiPlaybackEvent>? pending))
+                {
+                    pending = new Queue<MidiPlaybackEvent>();
+                    pendingNotes[key] = pending;
+                }
+
+                pending.Enqueue(midiEvent);
+                continue;
+            }
+
+            if (midiEvent.Kind != MidiPlaybackEventKind.NoteOff ||
+                !pendingNotes.TryGetValue(key, out Queue<MidiPlaybackEvent>? noteOns) ||
+                noteOns.Count == 0)
+            {
+                continue;
+            }
+
+            MidiPlaybackEvent noteOn = noteOns.Dequeue();
+            if (noteOn.Tick >= loopStart && noteOn.Tick < loopEnd && midiEvent.Tick >= loopEnd)
+                repeatedTailNoteOffs.Add(midiEvent);
+        }
+
+        return repeatedTailNoteOffs;
+    }
 
     private sealed record TrackLoopDefinition(
         int TrackIndex,

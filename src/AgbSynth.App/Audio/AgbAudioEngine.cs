@@ -2351,7 +2351,7 @@ public sealed class AgbAudioEngine : ISampleProvider, IDisposable
                 _noiseShortLfsr = shortLfsr,
                 _noiseBaseControl = baseControl,
                 _lfsr = 0,
-                _lastNoiseSample = 1
+                _lastNoiseSample = 0
             };
             voice.ConfigurePsgLength(length);
             return voice;

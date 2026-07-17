@@ -130,6 +130,35 @@ public sealed class ProjectFormatAndSequenceTests
     }
 
     [Fact]
+    public void Midi2Agb_ParseUsesFirstExecutionOfLoopTargetReusedByPattern()
+    {
+        const string source = """
+            song:
+                .byte 1, 0, 0, 0
+                .word 0
+                .word song_track_01
+            song_track_01:
+                .byte W24
+            loop_point:
+                .byte W24
+                .byte PEND
+                .byte W24
+                .byte PATT
+                .word loop_point
+                .byte W24
+                .byte GOTO
+                .word loop_point
+            """;
+
+        MidiPlaybackFile midi = Midi2AgbSequenceCodec.Parse(source, MidiCcMapping.Default);
+
+        MidiPlaybackEvent loopStart = Assert.Single(midi.Events, value => value.Kind == MidiPlaybackEventKind.ControlChange && value.Data1 == MidiCcMapping.Default.LoopStart);
+        MidiPlaybackEvent loopEnd = Assert.Single(midi.Events, value => value.Kind == MidiPlaybackEventKind.ControlChange && value.Data1 == MidiCcMapping.Default.LoopEnd);
+        Assert.Equal(24, loopStart.Tick);
+        Assert.Equal(120, loopEnd.Tick);
+    }
+
+    [Fact]
     public void Midi2Agb_WriteAndParsePreservesPlayableEventsAndPerTrackLoop()
     {
         var source = new MidiPlaybackFile(48, new List<MidiPlaybackEvent>

@@ -266,7 +266,7 @@ public static partial class Midi2AgbSequenceCodec
             }
             int statementPosition = position;
             Statement statement = parsed.Statements[position++];
-            executedTicks[statementPosition] = tick;
+            executedTicks.TryAdd(statementPosition, tick);
             if (statement.Kind != StatementKind.Bytes || statement.Values.Count == 0)
                 continue;
             string command = NormalizeCommand(statement.Values[0]);

@@ -119,6 +119,62 @@ public sealed class Mp2kMidiPlaybackSessionTests
     }
 
     [Fact]
+    public void SourcePositionTick_AdvancesThroughSilenceAndWrapsAtLoopBoundary()
+    {
+        const int loopStart = 89;
+        const int loopEnd = 90;
+        var session = CreateSession(
+            [
+                NoteOn(tick: 0, order: 0, note: 60),
+                Control(tick: 2, order: 1, track: 1, loopStart),
+                NoteOn(tick: 2, order: 2, note: 62, track: 1),
+                Control(tick: 5, order: 3, track: 1, loopEnd)
+            ],
+            _ => { });
+
+        Assert.Equal(0, session.SourcePositionTick);
+        session.AdvanceVBlank();
+        Assert.Equal(0, session.SourcePositionTick);
+        session.AdvanceVBlank();
+        Assert.Equal(1, session.SourcePositionTick);
+        session.AdvanceVBlank();
+        Assert.Equal(2, session.SourcePositionTick);
+        session.AdvanceVBlank();
+        Assert.Equal(3, session.SourcePositionTick);
+        session.AdvanceVBlank();
+        Assert.Equal(4, session.SourcePositionTick);
+        session.AdvanceVBlank();
+        Assert.Equal(2, session.SourcePositionTick);
+        Assert.Equal(5, session.SourceEndTick);
+    }
+
+    [Fact]
+    public void AdvanceVBlank_DoesNotRepeatIntroNoteOffAfterTrackLoop()
+    {
+        const int loopStart = 89;
+        const int loopEnd = 90;
+        var processed = new List<MidiPlaybackEvent>();
+        var session = CreateSession(
+            [
+                NoteOn(tick: 0, order: 0, note: 60),
+                Control(tick: 2, order: 1, track: 1, loopStart),
+                NoteOn(tick: 4, order: 2, note: 61),
+                Control(tick: 5, order: 3, track: 1, loopEnd),
+                NoteOff(tick: 5, order: 4, note: 60),
+                NoteOff(tick: 6, order: 5, note: 61)
+            ],
+            processed.Add);
+
+        while (session.NextTick <= 10)
+            session.AdvanceVBlank();
+
+        Assert.Single(processed, midiEvent =>
+            midiEvent.Kind == MidiPlaybackEventKind.NoteOff && midiEvent.Data1 == 60);
+        Assert.Equal(2, processed.Count(midiEvent =>
+            midiEvent.Kind == MidiPlaybackEventKind.NoteOff && midiEvent.Data1 == 61));
+    }
+
+    [Fact]
     public void AdvanceVBlank_SourceTrackTempoRepeatsWithTrackLoop()
     {
         const int loopStart = 89;
