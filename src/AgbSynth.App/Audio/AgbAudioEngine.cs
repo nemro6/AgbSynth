@@ -2102,6 +2102,9 @@ public sealed class AgbAudioEngine : ISampleProvider, IDisposable
     {
         private const int DefaultDmaBufferLength = 0x630;
         private const double GbaFrameRate = 59.7275;
+        private const int GbaScanlinesPerFrame = 228;
+        private const int GbaVBlankStartLine = 160;
+        private const int Mp2kDmaSyncLine = 150;
         private sbyte[] _left = [];
         private sbyte[] _right = [];
         private sbyte[] _outputDelayLeft = [];
@@ -2150,8 +2153,17 @@ public sealed class AgbAudioEngine : ISampleProvider, IDisposable
             int bufferLength = Math.Max(_blockSamples * 2, _blockSamples * dmaBufferCount);
             _left = new sbyte[bufferLength];
             _right = new sbyte[bufferLength];
-            _outputDelayLeft = new sbyte[_blockSamples];
-            _outputDelayRight = new sbyte[_blockSamples];
+            // Emerald runs SoundMain at VBlank (line 160), while the DirectSound
+            // DMA block boundary is synchronized at VCount line 150. Samples mixed
+            // by SoundMain therefore become audible at the following line 150.
+            int outputDelaySamples = Math.Max(
+                1,
+                (int)Math.Round(
+                    _blockSamples *
+                    (GbaScanlinesPerFrame - (GbaVBlankStartLine - Mp2kDmaSyncLine)) /
+                    (double)GbaScanlinesPerFrame));
+            _outputDelayLeft = new sbyte[outputDelaySamples];
+            _outputDelayRight = new sbyte[outputDelaySamples];
             ResetState();
         }
 

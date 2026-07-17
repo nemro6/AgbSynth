@@ -192,16 +192,17 @@ public sealed class AgbAudioEngineTests
     }
 
     [Fact]
-    public void Mp2kPlayback_PsgPrecedesDirectSoundByOneVBlankBuffer()
+    public void Mp2kPlayback_PsgPrecedesDirectSoundUntilNextDmaBlock()
     {
         int directSoundLatency = MeasureDirectSoundOnsetLatency(preRollFrames: 0);
         int psgLatency = MeasurePsgOnsetLatency();
-        int expectedVBlankFrames = (int)Math.Round(AgbAudioEngine.GbaOutputSampleRate / 59.7275);
+        int expectedLatencyFrames = (int)Math.Round(
+            AgbAudioEngine.GbaOutputSampleRate / 59.7275 * 218.0 / 228.0);
 
         Assert.InRange(
             directSoundLatency - psgLatency,
-            expectedVBlankFrames - 4,
-            expectedVBlankFrames + 4);
+            expectedLatencyFrames - 4,
+            expectedLatencyFrames + 4);
     }
 
     [Fact]
@@ -327,7 +328,7 @@ public sealed class AgbAudioEngineTests
     }
 
     [Fact]
-    public void Mp2kPcmOutput_UsesOneDmaBlockOfLatency()
+    public void Mp2kPcmOutput_BeginsAtTheNextVCountDmaBlock()
     {
         using var engine = new AgbAudioEngine(outputDeviceNumber: int.MaxValue, outputSampleRate: 65536)
         {
@@ -348,7 +349,9 @@ public sealed class AgbAudioEngineTests
 
         int firstAudibleFrame = Enumerable.Range(0, buffer.Length / 2)
             .First(frame => Math.Abs(buffer[frame * 2]) > 0.001f);
-        Assert.InRange(firstAudibleFrame, 1090, 1110);
+        int expectedLatencyFrames = (int)Math.Round(
+            65536 / 59.7275 * 218.0 / 228.0);
+        Assert.InRange(firstAudibleFrame, expectedLatencyFrames - 8, expectedLatencyFrames + 8);
     }
 
     [Fact]
