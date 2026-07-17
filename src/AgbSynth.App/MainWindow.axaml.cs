@@ -65,6 +65,7 @@ public partial class MainWindow : Window
         {
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
             SettingsPage.MidiCcMappingRequested -= OnMidiCcMappingClicked;
+            _viewModel.PersistUserSettings();
             _viewModel.CloseMidiInput();
             _ = _viewModel.StopSelectedSequencePlaybackAsync();
             _viewModel.DisposePlayback();

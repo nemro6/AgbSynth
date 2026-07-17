@@ -10,7 +10,9 @@ namespace AgbSynth.App.ViewModels;
 
 public sealed partial class MainWindowViewModel
 {
-    private bool _isLoadingUserSettings;
+    // Partial-view-model constructors assign several settings before the window
+    // loads the persisted file. Suppress writes until that initial load completes.
+    private bool _isLoadingUserSettings = true;
     private int _selectedAudioOutputDeviceNumber = -1;
     private AudioOutputDeviceOption? _selectedAudioOutputDevice;
     private RenderFrameRateOption? _selectedRenderFrameRate;
@@ -258,7 +260,17 @@ public sealed partial class MainWindowViewModel
         if (!_midiCcMapping.TryValidate(out _))
             _midiCcMapping = MidiCcMapping.Default;
 
+        // Apply explicitly after the complete load. Relying only on the property
+        // setter can leave the constructor's timer interval active when a binding
+        // has already assigned the same option instance.
+        ApplyRenderFrameRate(SelectedRenderFrameRate
+            ?? RenderFrameRateOptions.First(option => option.FramesPerSecond == 60));
         _isLoadingUserSettings = false;
+    }
+
+    public void PersistUserSettings()
+    {
+        SaveUserSettingsIfReady();
     }
 
     private void RefreshAudioOutputDevices(string? preferredName, int? preferredDeviceNumber)

@@ -900,12 +900,12 @@ public sealed class AgbAudioEngineTests
     }
 
     [Fact]
-    public void PsgAdsr_UsesLowThreeBitsForAttackDecayAndRelease()
+    public void WaveMemoryAttack_UsesFullEightBitMp2kCounter()
     {
-        float[] lowBits = RenderSquareEnvelope(attack: 1, decay: 1, release: 1);
-        float[] highBits = RenderSquareEnvelope(attack: 9, decay: 9, release: 9);
+        int fastOnset = MeasureWaveMemoryOnset(attack: 1);
+        int slowOnset = MeasureWaveMemoryOnset(attack: 9);
 
-        Assert.Equal(lowBits, highBits);
+        Assert.True(slowOnset > fastOnset * 4);
     }
 
     [Fact]
@@ -913,7 +913,7 @@ public sealed class AgbAudioEngineTests
     {
         using var engine = new AgbAudioEngine(outputDeviceNumber: int.MaxValue, outputSampleRate: 65536);
         float[] beforeFirstStep = new float[7000 * 2];
-        float[] afterFirstStep = new float[1000 * 2];
+        float[] afterFirstStep = new float[3000 * 2];
 
         Assert.True(engine.NoteOnSquare(1, 60, 127, 127, 0, 64, attack: 7, decay: 0, sustain: 15) >= 0);
         engine.Read(beforeFirstStep, 0, beforeFirstStep.Length);
@@ -1049,6 +1049,36 @@ public sealed class AgbAudioEngineTests
         engine.NoteOff(voiceId);
         engine.Read(buffer, 4096, 4096);
         return buffer;
+    }
+
+    private static int MeasureWaveMemoryOnset(int attack)
+    {
+        using var engine = new AgbAudioEngine(outputDeviceNumber: int.MaxValue)
+        {
+            OutputQuantizeEnabled = false
+        };
+        float[] buffer = new float[AgbAudioEngine.GbaOutputSampleRate * 2];
+        Assert.True(engine.NoteOnWaveMemory(
+            CreateAlternatingWaveRam(),
+            baseKey: 60,
+            midiNote: 60,
+            velocity: 127,
+            volume: 127,
+            pan: 64,
+            priority: 64,
+            attack: attack,
+            decay: 0,
+            sustain: 15,
+            release: 1) >= 0);
+        engine.Read(buffer, 0, buffer.Length);
+
+        for (int frame = 0; frame < buffer.Length / 2; frame++)
+        {
+            if (Math.Abs(buffer[frame * 2]) > 0.001f || Math.Abs(buffer[frame * 2 + 1]) > 0.001f)
+                return frame;
+        }
+
+        return int.MaxValue;
     }
 
     private static float[] RenderSquareSweep(int squareChannel, int sweep, int midiNote = 60)

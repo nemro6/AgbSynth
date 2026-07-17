@@ -63,6 +63,7 @@ public sealed class AgbAudioEngine : ISampleProvider, IDisposable
     private readonly ulong[] _squareCycleAccumulatorsQ32 = new ulong[PsgSquareHardwareChannelCount];
     private readonly TrackLfoState[] _trackLfos = CreateTrackLfoStates();
     private Mp2kMidiPlaybackSession? _midiPlaybackSession;
+    private bool _processingPlaybackVBlank;
     private WaveOutEvent? _output;
     private int _nextVoiceId;
     private int _desiredLatencyMs;
@@ -595,6 +596,8 @@ public sealed class AgbAudioEngine : ISampleProvider, IDisposable
             int hardwareChannel = kind == VoiceKind.PsgSquare2 ? 1 : 0;
             voice.SetSquareDutyPosition(_squarePhases[hardwareChannel]);
             voice.SetPsgCycleAccumulatorQ32(_squareCycleAccumulatorsQ32[hardwareChannel]);
+            if (_processingPlaybackVBlank)
+                voice.SkipNextPsgEnvelopeStep();
             StartTrackLfoForVoiceNoLock(voice, NormalizeLfoSettings(lfoSettings));
             _voices.Add(voice);
         }
@@ -645,6 +648,8 @@ public sealed class AgbAudioEngine : ISampleProvider, IDisposable
                 return -1;
 
             voice.Slot = slot;
+            if (_processingPlaybackVBlank)
+                voice.SkipNextPsgEnvelopeStep();
             StartTrackLfoForVoiceNoLock(voice, NormalizeLfoSettings(lfoSettings));
             _voices.Add(voice);
         }
@@ -692,6 +697,8 @@ public sealed class AgbAudioEngine : ISampleProvider, IDisposable
                 return -1;
 
             voice.Slot = slot;
+            if (_processingPlaybackVBlank)
+                voice.SkipNextPsgEnvelopeStep();
             StartTrackLfoForVoiceNoLock(voice, NormalizeLfoSettings(lfoSettings));
             _voices.Add(voice);
         }
@@ -1297,7 +1304,17 @@ public sealed class AgbAudioEngine : ISampleProvider, IDisposable
         if (_midiPlaybackSession is { } session)
         {
             for (int i = 0; i < vblankTicks; i++)
-                session.AdvanceVBlank(TickTrackLfosNoLock);
+            {
+                _processingPlaybackVBlank = true;
+                try
+                {
+                    session.AdvanceVBlank(TickTrackLfosNoLock);
+                }
+                finally
+                {
+                    _processingPlaybackVBlank = false;
+                }
+            }
         }
         else
         {
@@ -1757,10 +1774,7 @@ public sealed class AgbAudioEngine : ISampleProvider, IDisposable
 
             if (_psg)
             {
-                _attack &= 0x07;
-                _decay &= 0x07;
                 _sustain &= 0x0F;
-                _release &= 0x07;
                 RecalculatePsgTargets();
             }
         }
@@ -1821,14 +1835,11 @@ public sealed class AgbAudioEngine : ISampleProvider, IDisposable
 
             if (_psg)
             {
-                if (_release == 0 || _velocity == 0)
-                    Stop();
-                else
-                {
-                    _state = EnvelopeState.Releasing;
-                    _processStep = 0;
-                    _psgReleasePending = _usesPsgHardwareEnvelope;
-                }
+                // MP2K consumes STOP in CgbSound. Defer even an immediate release
+                // until that VBlank pass instead of changing output mid-frame.
+                _state = EnvelopeState.Releasing;
+                _processStep = 0;
+                _psgReleasePending = true;
                 return;
             }
 
@@ -2053,8 +2064,17 @@ public sealed class AgbAudioEngine : ISampleProvider, IDisposable
                 case EnvelopeState.Releasing:
                     if (_psgReleasePending)
                     {
-                        ConfigurePsgHardwareEnvelope(_velocity, _release, increase: false);
                         _psgReleasePending = false;
+                        if (_release == 0 || _velocity == 0)
+                        {
+                            Stop();
+                            return;
+                        }
+
+                        ConfigurePsgHardwareEnvelope(_velocity, _release, increase: false);
+                        // CgbSound initializes and decrements the release counter on
+                        // this pass; the first volume step occurs on a later pass.
+                        return;
                     }
                     if (_release == 0 || ++_processStep >= _release)
                     {
@@ -2250,6 +2270,7 @@ public sealed class AgbAudioEngine : ISampleProvider, IDisposable
         private int _sweepPeriod;
         private int _sweepTimerCounter;
         private int _sweepTimer;
+        private bool _skipNextPsgEnvelopeStep;
 
         private readonly bool _pitchLocked;
         private readonly int _outputSampleRate;
@@ -2365,6 +2386,12 @@ public sealed class AgbAudioEngine : ISampleProvider, IDisposable
         {
             if (Kind is VoiceKind.PsgSquare1 or VoiceKind.PsgSquare2)
                 _psgCycleAccumulatorQ32 = accumulator;
+        }
+
+        public void SkipNextPsgEnvelopeStep()
+        {
+            if (Kind != VoiceKind.DirectSound)
+                _skipNextPsgEnvelopeStep = true;
         }
 
         public void Release()
@@ -2666,6 +2693,14 @@ public sealed class AgbAudioEngine : ISampleProvider, IDisposable
                 return false;
             }
 
+            if (_skipNextPsgEnvelopeStep && psgEnvelopeSteps > 0)
+            {
+                // The factory already performed the START branch of CgbSound.
+                // Do not also apply the ordinary envelope step from that VBlank.
+                psgEnvelopeSteps--;
+                _skipNextPsgEnvelopeStep = false;
+            }
+
             float envelopeLevel = Envelope.Advance(
                 _envelopeTickIncrementQ32,
                 psgEnvelopeSteps,
@@ -2800,7 +2835,7 @@ public sealed class AgbAudioEngine : ISampleProvider, IDisposable
             if (envelopeVolume <= 9)
                 return sample >> 1;
             if (envelopeVolume <= 13)
-                return (sample >> 1) + (sample >> 2);
+                return (sample * 3) >> 2;
             return sample;
         }
 
